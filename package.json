@@ -1,0 +1,17 @@
+{
+  "name": "videosum",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Transcribe videos with timestamps, summarize them with OpenAI, and stitch a shorter highlight video with ffmpeg.",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "ui": "node src/server.mjs",
+    "check": "node --check src/index.mjs && node --check src/pipeline.mjs && node --check src/server.mjs"
+  },
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "multer": "^2.1.1"
+  }
+}
