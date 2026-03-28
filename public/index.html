@@ -1,320 +1,810 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Videosum</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      --bg: #0f1115;
-      --surface: #181b22;
-      --border: #2a2f3a;
-      --text: #e8eaef;
-      --muted: #8b919d;
-      --accent: #3d9cf0;
-      --accent-dim: #2563a8;
-      --danger: #f07178;
-      --radius: 12px;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      font-family: "DM Sans", system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-    }
-    .wrap {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 2rem 1.25rem 4rem;
-    }
-    header {
-      margin-bottom: 2rem;
-    }
-    h1 {
-      font-size: 1.75rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      margin: 0 0 0.35rem;
-    }
-    .sub {
-      color: var(--muted);
-      font-size: 0.95rem;
-    }
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.25rem 1.35rem;
-      margin-bottom: 1.25rem;
-    }
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      align-items: flex-end;
-    }
-    label {
-      display: block;
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: var(--muted);
-      margin-bottom: 0.35rem;
-    }
-    input[type="file"] {
-      width: 100%;
-      padding: 0.65rem;
-      border-radius: 8px;
-      border: 1px dashed var(--border);
-      background: var(--bg);
-      color: var(--muted);
-      font-size: 0.875rem;
-    }
-    input[type="number"] {
-      width: 8rem;
-      padding: 0.55rem 0.75rem;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--bg);
-      color: var(--text);
-      font-family: "JetBrains Mono", monospace;
-      font-size: 0.875rem;
-    }
-    button {
-      font-family: inherit;
-      font-weight: 600;
-      font-size: 0.9rem;
-      padding: 0.65rem 1.35rem;
-      border-radius: 8px;
-      border: none;
-      cursor: pointer;
-      background: linear-gradient(180deg, var(--accent), var(--accent-dim));
-      color: #fff;
-      box-shadow: 0 2px 12px rgba(61, 156, 240, 0.25);
-    }
-    button:disabled {
-      opacity: 0.45;
-      cursor: not-allowed;
-      box-shadow: none;
-    }
-    .error {
-      color: var(--danger);
-      font-size: 0.9rem;
-      margin-top: 0.75rem;
-    }
-    .meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1rem;
-      font-size: 0.85rem;
-      color: var(--muted);
-      margin-bottom: 1rem;
-    }
-    .meta span strong { color: var(--text); }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1.25rem;
-    }
-    @media (max-width: 900px) {
-      .grid { grid-template-columns: 1fr; }
-    }
-    .card h2 {
-      font-size: 1rem;
-      font-weight: 600;
-      margin: 0 0 1rem;
-      padding-bottom: 0.65rem;
-      border-bottom: 1px solid var(--border);
-    }
-    .transcript-list {
-      max-height: 520px;
-      overflow-y: auto;
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .transcript-list li {
-      padding: 0.65rem 0.75rem;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.875rem;
-    }
-    .transcript-list li:last-child { border-bottom: none; }
-    .ts {
-      font-family: "JetBrains Mono", monospace;
-      font-size: 0.75rem;
-      color: var(--accent);
-      margin-bottom: 0.25rem;
-    }
-    .summary-body {
-      font-size: 0.95rem;
-      white-space: pre-wrap;
-      margin-bottom: 1.25rem;
-    }
-    .clips {
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    .clips li {
-      font-size: 0.85rem;
-      padding: 0.6rem 0;
-      border-top: 1px solid var(--border);
-    }
-    .clips li:first-child { border-top: none; padding-top: 0; }
-    .clip-range {
-      font-family: "JetBrains Mono", monospace;
-      font-size: 0.75rem;
-      color: var(--muted);
-    }
-    a.download {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
-      margin-top: 1rem;
-      color: var(--accent);
-      font-weight: 600;
-      text-decoration: none;
-      font-size: 0.9rem;
-    }
-    a.download:hover { text-decoration: underline; }
-    .loading {
-      display: flex;
-      align-items: center;
-      gap: 0.65rem;
-      color: var(--muted);
-      font-size: 0.9rem;
-    }
-    .spinner {
-      width: 1.1rem;
-      height: 1.1rem;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .hidden { display: none !important; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <header>
-      <h1>Videosum</h1>
-      <p class="sub">Upload a video, get Whisper timestamps and an OpenAI summary plus a highlight cut.</p>
-    </header>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Videosum</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0c10;
+        --bg-elevated: #10141c;
+        --surface: #151a24;
+        --surface-2: #1c2330;
+        --border: #2a3344;
+        --text: #eef1f6;
+        --muted: #8b95a8;
+        --accent: #4da3ff;
+        --accent-dim: #2563eb;
+        --accent-soft: rgba(77, 163, 255, 0.12);
+        --success: #3dd68c;
+        --danger: #ff6b7a;
+        --warn: #e8b84a;
+        --radius: 14px;
+        --radius-sm: 10px;
+        --shadow: 0 12px 48px rgba(0, 0, 0, 0.45);
+        --font: "Source Sans 3", system-ui, sans-serif;
+        --font-display: "Outfit", system-ui, sans-serif;
+        --font-mono: "JetBrains Mono", ui-monospace, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: var(--font);
+        font-size: 15px;
+        line-height: 1.5;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .bg-mesh {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        background:
+          radial-gradient(
+            ellipse 80% 50% at 50% -20%,
+            rgba(77, 163, 255, 0.18),
+            transparent
+          ),
+          radial-gradient(
+            ellipse 60% 40% at 100% 0%,
+            rgba(37, 99, 235, 0.1),
+            transparent
+          ),
+          var(--bg);
+        z-index: 0;
+      }
+      .wrap {
+        position: relative;
+        z-index: 1;
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 2rem 1.25rem 4rem;
+      }
+      .hero {
+        display: flex;
+        align-items: flex-start;
+        gap: 1.25rem;
+        margin-bottom: 2rem;
+        padding-bottom: 1.75rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .hero-mark {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        background: linear-gradient(
+          135deg,
+          var(--accent) 0%,
+          var(--accent-dim) 100%
+        );
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-display);
+        font-weight: 700;
+        font-size: 1.35rem;
+        color: #fff;
+        box-shadow: 0 8px 28px rgba(77, 163, 255, 0.35);
+        flex-shrink: 0;
+      }
+      .hero-copy h1 {
+        font-family: var(--font-display);
+        font-size: clamp(1.75rem, 4vw, 2.15rem);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        margin: 0 0 0.4rem;
+        line-height: 1.15;
+      }
+      .hero-copy .sub {
+        color: var(--muted);
+        font-size: 1rem;
+        max-width: 36rem;
+        margin: 0;
+        line-height: 1.45;
+      }
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+      }
+      .panel-head {
+        padding: 1.1rem 1.35rem;
+        background: linear-gradient(
+          180deg,
+          var(--surface-2) 0%,
+          var(--surface) 100%
+        );
+        border-bottom: 1px solid var(--border);
+      }
+      .eyebrow {
+        font-family: var(--font-display);
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+        margin: 0 0 0.35rem;
+      }
+      .panel-head h2 {
+        font-family: var(--font-display);
+        font-size: 1.15rem;
+        font-weight: 600;
+        margin: 0;
+        letter-spacing: -0.02em;
+      }
+      .panel-body {
+        padding: 1.35rem 1.35rem 1.5rem;
+      }
+      .upload-zone {
+        position: relative;
+        border: 2px dashed var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-elevated);
+        min-height: 140px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition:
+          border-color 0.2s,
+          background 0.2s,
+          box-shadow 0.2s;
+      }
+      .upload-zone:hover,
+      .upload-zone:focus-within {
+        border-color: rgba(77, 163, 255, 0.45);
+        background: var(--accent-soft);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .upload-zone input[type="file"] {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+        font-size: 0;
+      }
+      .upload-ui {
+        text-align: center;
+        padding: 1.25rem 1rem;
+        pointer-events: none;
+      }
+      .upload-ui .icon {
+        font-size: 2rem;
+        line-height: 1;
+        margin-bottom: 0.5rem;
+        opacity: 0.9;
+      }
+      .upload-ui strong {
+        font-weight: 600;
+        color: var(--text);
+      }
+      .upload-ui .hint {
+        font-size: 0.9rem;
+        color: var(--muted);
+        margin: 0.35rem 0 0;
+      }
+      .file-name {
+        font-family: var(--font-mono);
+        font-size: 0.78rem;
+        color: var(--accent);
+        margin: 0.65rem 0 0;
+        word-break: break-all;
+        max-width: 100%;
+      }
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 1rem;
+        margin-top: 1.25rem;
+      }
+      .field label {
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin-bottom: 0.45rem;
+      }
+      .field input[type="number"] {
+        width: 6.5rem;
+        padding: 0.65rem 0.85rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg-elevated);
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 0.9rem;
+        outline: none;
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s;
+      }
+      .field input[type="number"]:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .field select {
+        min-width: min(100%, 22rem);
+        max-width: 100%;
+        padding: 0.65rem 0.85rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg-elevated);
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 0.9rem;
+        outline: none;
+        cursor: pointer;
+      }
+      .field select:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .field-grow {
+        flex: 1 1 14rem;
+        min-width: 0;
+      }
+      .field-hint {
+        font-size: 0.8rem;
+        color: var(--muted);
+        margin: 0.35rem 0 0;
+        line-height: 1.4;
+        max-width: 28rem;
+      }
+      .queue-panel {
+        margin-top: 1.35rem;
+        padding-top: 1.25rem;
+        border-top: 1px solid var(--border);
+      }
+      .queue-panel h3 {
+        font-family: var(--font-display);
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin: 0 0 0.75rem;
+        letter-spacing: -0.02em;
+      }
+      .queue-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+      }
+      .queue-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.65rem 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg-elevated);
+        font-size: 0.88rem;
+      }
+      .queue-row.is-done {
+        cursor: pointer;
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .queue-row.is-done:hover {
+        border-color: rgba(77, 163, 255, 0.45);
+        background: var(--accent-soft);
+      }
+      .queue-name {
+        font-family: var(--font-mono);
+        font-size: 0.8rem;
+        color: var(--text);
+        flex: 1 1 8rem;
+        min-width: 0;
+        word-break: break-all;
+      }
+      .queue-status {
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .queue-status.st-pending,
+      .queue-status.st-queued {
+        color: var(--warn);
+      }
+      .queue-status.st-running {
+        color: var(--accent);
+      }
+      .queue-status.st-done {
+        color: var(--success);
+      }
+      .queue-status.st-failed {
+        color: var(--danger);
+      }
+      .queue-err {
+        width: 100%;
+        font-size: 0.8rem;
+        color: var(--danger);
+        margin: 0;
+      }
+      .btn-primary {
+        font-family: var(--font);
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 0.7rem 1.6rem;
+        border-radius: var(--radius-sm);
+        border: none;
+        cursor: pointer;
+        background: linear-gradient(180deg, #5eb0ff 0%, var(--accent) 100%);
+        color: #061018;
+        box-shadow: 0 4px 20px rgba(77, 163, 255, 0.35);
+        transition:
+          filter 0.15s,
+          transform 0.08s;
+        margin-left: auto;
+      }
+      .btn-primary:hover {
+        filter: brightness(1.06);
+      }
+      .btn-primary:active {
+        transform: scale(0.98);
+      }
+      .btn-primary:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+      }
+      .error {
+        color: var(--danger);
+        font-size: 0.9rem;
+        margin-top: 1rem;
+        padding: 0.75rem 1rem;
+        border-radius: var(--radius-sm);
+        background: rgba(255, 107, 122, 0.1);
+        border: 1px solid rgba(255, 107, 122, 0.25);
+      }
+      .loading {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        margin-top: 1.1rem;
+        padding: 1rem 1.1rem;
+        border-radius: var(--radius-sm);
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+      .spinner {
+        width: 1.15rem;
+        height: 1.15rem;
+        flex-shrink: 0;
+        border: 2px solid var(--border);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.65s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1.25rem;
+      }
+      .meta-pill {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.85rem;
+        border-radius: 999px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .meta-pill strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.25rem;
+      }
+      @media (max-width: 900px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .controls {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .btn-primary {
+          margin-left: 0;
+          width: 100%;
+        }
+      }
+      .card .panel-head h2 {
+        font-size: 0.95rem;
+      }
+      .transcript-list {
+        max-height: 420px;
+        overflow-y: auto;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg-elevated);
+      }
+      .transcript-list li {
+        padding: 0.75rem 0.9rem;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.875rem;
+      }
+      .transcript-list li:last-child {
+        border-bottom: none;
+      }
+      .ts {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        color: var(--accent);
+        margin-bottom: 0.3rem;
+      }
+      .subhead {
+        font-family: var(--font-display);
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin: 1.35rem 0 0.65rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .summary-body {
+        font-size: 0.95rem;
+        white-space: pre-wrap;
+        line-height: 1.55;
+      }
+      .fulltext-box {
+        max-height: 200px;
+        overflow-y: auto;
+        font-size: 0.875rem;
+        color: var(--muted);
+        line-height: 1.5;
+        padding: 0.85rem 1rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg-elevated);
+      }
+      .clips {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .clips li {
+        font-size: 0.85rem;
+        padding: 0.75rem 0;
+        border-top: 1px solid var(--border);
+      }
+      .clips li:first-child {
+        border-top: none;
+        padding-top: 0;
+      }
+      .clip-range {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        color: var(--muted);
+        margin-bottom: 0.25rem;
+      }
+      a.download {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 1.25rem;
+        padding: 0.65rem 1.1rem;
+        border-radius: var(--radius-sm);
+        background: var(--accent-soft);
+        border: 1px solid rgba(77, 163, 255, 0.35);
+        color: var(--accent);
+        font-weight: 600;
+        text-decoration: none;
+        font-size: 0.9rem;
+        transition:
+          background 0.15s,
+          border-color 0.15s;
+      }
+      a.download:hover {
+        background: rgba(77, 163, 255, 0.2);
+        border-color: var(--accent);
+      }
+      .video-wrap {
+        margin-top: 0;
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        border: 1px solid var(--border);
+        background: #000;
+      }
+      .summary-video {
+        width: 100%;
+        max-height: min(52vh, 400px);
+        display: block;
+      }
+      .video-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1rem;
+        align-items: center;
+      }
+      .video-actions + .summary-body {
+        margin-top: 1.35rem;
+      }
+      .hidden {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bg-mesh"></div>
+    <div class="wrap">
+      <header class="hero">
+        <div class="hero-mark">V</div>
+        <div class="hero-copy">
+          <h1>Videosum</h1>
+          <p class="sub">
+            AI video summarizer — key moments, trailers, highlights, action
+            items, chapters and more.
+          </p>
+        </div>
+      </header>
 
-    <form class="panel" id="form">
-      <div class="row">
-        <div style="flex: 1; min-width: 200px;">
-          <label for="video">Video file</label>
-          <input id="video" name="video" type="file" accept="video/*" required />
+      <form class="panel" id="form">
+        <div class="panel-head">
+          <p class="eyebrow">Pipeline</p>
+          <h2>Upload &amp; run</h2>
         </div>
-        <div>
-          <label for="targetMinutes">Target minutes</label>
-          <input id="targetMinutes" name="targetMinutes" type="number" min="0.5" max="30" step="0.5" value="2" />
+        <div class="panel-body">
+          <div class="upload-zone">
+            <input
+              id="video"
+              name="video"
+              type="file"
+              accept="video/*"
+              multiple
+            />
+            <div class="upload-ui">
+              <div class="icon">▶</div>
+              <p class="hint">
+                <strong>Drop videos here</strong> or click to browse — select
+                several files to queue them
+              </p>
+              <p class="file-name" id="fileLabel">No files selected</p>
+            </div>
+          </div>
+          <div class="controls">
+            <div class="field field-grow">
+              <label for="summaryMode">Summarization type</label>
+              <select id="summaryMode" name="mode">
+                <option value="key_moments">
+                  ⭐ Key moments — Most important parts
+                </option>
+                <option value="short_highlights">
+                  ⚡ Short highlights — Fast, engaging clips
+                </option>
+                <option value="action_items">
+                  ✅ Action items — Tasks, decisions, deadlines
+                </option>
+                <option value="topic_chapters">
+                  📚 Topic chapters — One clip per topic
+                </option>
+                <option value="tutorial_essentials">
+                  🎓 Tutorial essentials — Steps &amp; demos only
+                </option>
+                <option value="trailer">
+                  🎬 Trailer — Dramatic hook to climax
+                </option>
+              </select>
+              <p class="field-hint">
+                Same list as the browser extension. Each mode has its own
+                default length unless you set target minutes below.
+              </p>
+            </div>
+            <div class="field">
+              <label for="targetMinutes">Target minutes</label>
+              <input
+                id="targetMinutes"
+                name="targetMinutes"
+                type="number"
+                min="0.5"
+                max="120"
+                step="0.5"
+                placeholder="Auto"
+              />
+              <p class="field-hint">Empty = use each mode’s default.</p>
+            </div>
+            <button type="submit" class="btn-primary" id="submit">
+              Summarize
+            </button>
+          </div>
+          <div id="queuePanel" class="queue-panel hidden">
+            <h3>Queue</h3>
+            <ul class="queue-list" id="queueList"></ul>
+          </div>
+          <div id="err" class="error hidden"></div>
+          <div id="loading" class="loading hidden">
+            <span class="spinner"></span>
+            <span
+              >Extracting audio, transcribing, summarizing, rendering… this can
+              take several minutes.</span
+            >
+          </div>
         </div>
-        <div>
-          <button type="submit" id="submit">Summarize</button>
-        </div>
-      </div>
-      <div id="err" class="error hidden"></div>
-      <div id="loading" class="loading hidden" style="margin-top: 1rem;">
-        <span class="spinner"></span>
-        <span>Extracting audio, transcribing, summarizing, rendering… this can take several minutes.</span>
-      </div>
-    </form>
+      </form>
 
-    <div id="results" class="hidden">
-      <div class="meta" id="meta"></div>
-      <div class="grid">
-        <div class="panel card">
-          <h2>Transcript (timestamps)</h2>
-          <ul class="transcript-list" id="segments"></ul>
-          <h2 style="margin-top: 1.25rem;">Full text</h2>
-          <div class="summary-body" id="fullText" style="max-height: 200px; overflow-y: auto; font-size: 0.875rem; color: var(--muted);"></div>
-        </div>
-        <div class="panel card">
-          <h2>OpenAI summary</h2>
-          <div class="summary-body" id="summaryText"></div>
-          <h2 style="margin-top: 1.5rem;">Selected clips</h2>
-          <ul class="clips" id="clips"></ul>
-          <a class="download" id="download" href="#" download>Download summary video</a>
+      <div id="results" class="hidden">
+        <div class="meta" id="meta"></div>
+        <div class="grid">
+          <div class="panel card">
+            <div class="panel-head">
+              <h2>Transcript</h2>
+            </div>
+            <div class="panel-body">
+              <ul class="transcript-list" id="segments"></ul>
+              <p class="subhead">Full text</p>
+              <div class="fulltext-box summary-body" id="fullText"></div>
+            </div>
+          </div>
+          <div class="panel card">
+            <div class="panel-head">
+              <h2>Summary</h2>
+            </div>
+            <div class="panel-body">
+              <p class="subhead">Summary video</p>
+              <div class="video-wrap">
+                <video
+                  id="summaryPlayer"
+                  class="summary-video"
+                  controls
+                  playsinline
+                  preload="metadata"
+                ></video>
+              </div>
+              <div class="video-actions">
+                <a class="download" id="download" href="#" download
+                  >Download summary video</a
+                >
+              </div>
+              <div class="summary-body" id="summaryText"></div>
+              <p class="subhead">Selected clips</p>
+              <ul class="clips" id="clips"></ul>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-  <script>
-    function formatSeconds(totalSeconds) {
-      const hours = Math.floor(totalSeconds / 3600);
-      const minutes = Math.floor((totalSeconds % 3600) / 60);
-      const sec = totalSeconds % 60;
-      const seconds = String(sec.toFixed(2)).padStart(5, "0");
-      return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${seconds}`;
-    }
-
-    const form = document.getElementById("form");
-    const submit = document.getElementById("submit");
-    const err = document.getElementById("err");
-    const loading = document.getElementById("loading");
-    const results = document.getElementById("results");
-    const meta = document.getElementById("meta");
-    const segmentsEl = document.getElementById("segments");
-    const fullTextEl = document.getElementById("fullText");
-    const summaryText = document.getElementById("summaryText");
-    const clipsEl = document.getElementById("clips");
-    const download = document.getElementById("download");
-
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      err.classList.add("hidden");
-      err.textContent = "";
-      results.classList.add("hidden");
-      loading.classList.remove("hidden");
-      submit.disabled = true;
-
-      const fd = new FormData(form);
-      const videoInput = document.getElementById("video");
-      if (!videoInput.files.length) {
-        err.textContent = "Choose a video file.";
-        err.classList.remove("hidden");
-        loading.classList.add("hidden");
-        submit.disabled = false;
-        return;
+    <script>
+      function formatSeconds(totalSeconds) {
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const sec = totalSeconds % 60;
+        const seconds = String(sec.toFixed(2)).padStart(5, "0");
+        return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${seconds}`;
       }
 
-      try {
-        const res = await fetch("/api/summarize", {
-          method: "POST",
-          body: fd
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(data.error || res.statusText || "Request failed");
-        }
+      const form = document.getElementById("form");
+      const videoInput = document.getElementById("video");
+      const fileLabel = document.getElementById("fileLabel");
+      const summaryModeEl = document.getElementById("summaryMode");
+      const targetMinutesEl = document.getElementById("targetMinutes");
+      const submit = document.getElementById("submit");
+      const err = document.getElementById("err");
+      const loading = document.getElementById("loading");
+      const results = document.getElementById("results");
+      const meta = document.getElementById("meta");
+      const segmentsEl = document.getElementById("segments");
+      const fullTextEl = document.getElementById("fullText");
+      const summaryText = document.getElementById("summaryText");
+      const clipsEl = document.getElementById("clips");
+      const download = document.getElementById("download");
+      const summaryPlayer = document.getElementById("summaryPlayer");
+      const queuePanel = document.getElementById("queuePanel");
+      const queueList = document.getElementById("queueList");
+      const completedJobs = new Map();
 
+      async function loadSummaryModes() {
+        try {
+          const res = await fetch("/api/summary-modes");
+          if (!res.ok) {
+            return;
+          }
+          const body = await res.json();
+          const modes = body.modes || [];
+          const def = body.defaultMode || "key_moments";
+          if (!modes.length) {
+            return;
+          }
+          summaryModeEl.innerHTML = modes
+            .map((m) => {
+              const icons = {
+                key_moments: "⭐",
+                short_highlights: "⚡",
+                action_items: "✅",
+                topic_chapters: "📚",
+                tutorial_essentials: "🎓",
+                trailer: "🎬",
+              };
+              const icon = icons[m.id] || "";
+              return `<option value="${m.id}">${icon ? icon + " " : ""}${m.label} — ${m.description}</option>`;
+            })
+            .join("");
+          if (modes.some((m) => m.id === def)) {
+            summaryModeEl.value = def;
+          }
+        } catch {
+          void 0;
+        }
+      }
+
+      loadSummaryModes();
+
+      videoInput.addEventListener("change", () => {
+        const n = videoInput.files.length;
+        if (!n) {
+          fileLabel.textContent = "No files selected";
+          return;
+        }
+        if (n === 1) {
+          fileLabel.textContent = videoInput.files[0].name;
+          return;
+        }
+        fileLabel.textContent = `${n} files selected`;
+      });
+
+      function escapeHtml(s) {
+        const d = document.createElement("div");
+        d.textContent = s;
+        return d.innerHTML;
+      }
+
+      function showResultsFromJob(data, sourceLabel) {
         meta.innerHTML = [
-          data.language ? `<span>Language: <strong>${escapeHtml(data.language)}</strong></span>` : "",
+          sourceLabel
+            ? `<span class="meta-pill">File: <strong>${escapeHtml(sourceLabel)}</strong></span>`
+            : "",
+          data.language
+            ? `<span class="meta-pill">Language: <strong>${escapeHtml(data.language)}</strong></span>`
+            : "",
           data.duration != null
-            ? `<span>Duration: <strong>${formatSeconds(Number(data.duration))}</strong></span>`
+            ? `<span class="meta-pill">Duration: <strong>${formatSeconds(Number(data.duration))}</strong></span>`
             : "",
           data.fullText
-            ? `<span>Full text length: <strong>${data.fullText.length}</strong> chars</span>`
-            : ""
-        ].filter(Boolean).join("");
+            ? `<span class="meta-pill">Chars: <strong>${data.fullText.length}</strong></span>`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("");
 
         segmentsEl.innerHTML = (data.segments || [])
           .map(
             (s) => `<li>
               <div class="ts">#${s.index} · ${formatSeconds(s.start)} → ${formatSeconds(s.end)}</div>
               <div>${escapeHtml(s.text)}</div>
-            </li>`
+            </li>`,
           )
           .join("");
 
@@ -326,28 +816,149 @@
             (c) => `<li>
               <div class="clip-range">seg ${c.start_segment}–${c.end_segment}</div>
               <div>${escapeHtml(c.reason || "")}</div>
-            </li>`
+            </li>`,
           )
           .join("");
 
-        download.href = data.videoUrl;
+        const vUrl = data.videoUrl;
+        download.href = vUrl;
         download.setAttribute("download", "summary-video.mp4");
+        summaryPlayer.src = vUrl;
+        summaryPlayer.load();
 
         results.classList.remove("hidden");
-      } catch (x) {
-        err.textContent = x.message || String(x);
-        err.classList.remove("hidden");
-      } finally {
-        loading.classList.add("hidden");
-        submit.disabled = false;
+        results.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-    });
 
-    function escapeHtml(s) {
-      const d = document.createElement("div");
-      d.textContent = s;
-      return d.innerHTML;
-    }
-  </script>
-</body>
+      function setQueueRowState(row, status, detail) {
+        const st = row.querySelector(".queue-status");
+        const er = row.querySelector(".queue-err");
+        st.className = "queue-status st-" + status;
+        const labels = {
+          starting: "Starting…",
+          pending: "Queued",
+          running: "Processing",
+          done: "Done",
+          failed: "Failed",
+        };
+        st.textContent = labels[status] || status;
+        row.classList.toggle("is-done", status === "done");
+        if (er) {
+          er.textContent = detail || "";
+          er.classList.toggle("hidden", !detail);
+        }
+      }
+
+      function makeQueueRow(fileName) {
+        const li = document.createElement("li");
+        li.className = "queue-row";
+        li.innerHTML = `<span class="queue-name"></span><span class="queue-status st-pending">Queued</span><p class="queue-err hidden"></p>`;
+        li.querySelector(".queue-name").textContent = fileName;
+        return li;
+      }
+
+      async function pollJob(jobId) {
+        const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+        for (;;) {
+          const res = await fetch(`/api/jobs/${jobId}`);
+          const j = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            throw new Error(j.error || res.statusText || "Poll failed");
+          }
+          if (j.status === "done" || j.status === "failed") {
+            return j;
+          }
+          await delay(1500);
+        }
+      }
+
+      async function runOneUpload(file, row) {
+        setQueueRowState(row, "starting");
+        const fd = new FormData();
+        fd.append("video", file);
+        fd.append("mode", summaryModeEl.value);
+        const tm = targetMinutesEl.value.trim();
+        if (tm !== "") {
+          fd.append("targetMinutes", tm);
+        }
+        const res = await fetch("/api/jobs", { method: "POST", body: fd });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(body.error || res.statusText || "Upload failed");
+        }
+        const jobId = body.jobId;
+        setQueueRowState(row, "pending");
+        const final = await pollJob(jobId);
+        if (final.status === "failed") {
+          setQueueRowState(row, "failed", final.error || "Unknown error");
+          return { ok: false, fileName: file.name };
+        }
+        setQueueRowState(row, "done");
+        completedJobs.set(jobId, { data: final, fileName: file.name });
+        row.dataset.jobId = jobId;
+        return { ok: true, fileName: file.name, data: final };
+      }
+
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        err.classList.add("hidden");
+        err.textContent = "";
+        const files = Array.from(videoInput.files || []);
+        if (!files.length) {
+          err.textContent = "Choose at least one video file.";
+          err.classList.remove("hidden");
+          return;
+        }
+
+        results.classList.add("hidden");
+        summaryPlayer.pause();
+        summaryPlayer.removeAttribute("src");
+        summaryPlayer.load();
+
+        queuePanel.classList.remove("hidden");
+        queueList.innerHTML = "";
+        const rows = files.map((f) => {
+          const row = makeQueueRow(f.name);
+          queueList.appendChild(row);
+          return row;
+        });
+
+        loading.classList.remove("hidden");
+        submit.disabled = true;
+
+        try {
+          const outcomes = await Promise.all(
+            files.map((file, i) =>
+              runOneUpload(file, rows[i]).catch((x) => {
+                setQueueRowState(rows[i], "failed", x.message || String(x));
+                return { ok: false };
+              }),
+            ),
+          );
+          const firstOk = outcomes.find((o) => o && o.ok);
+          if (firstOk) {
+            showResultsFromJob(firstOk.data, firstOk.fileName);
+          }
+        } catch (x) {
+          err.textContent = x.message || String(x);
+          err.classList.remove("hidden");
+        } finally {
+          loading.classList.add("hidden");
+          submit.disabled = false;
+        }
+      });
+
+      queueList.addEventListener("click", (e) => {
+        const row = e.target.closest(".queue-row.is-done");
+        const jobId = row?.dataset?.jobId;
+        if (!jobId) {
+          return;
+        }
+        const entry = completedJobs.get(jobId);
+        if (entry) {
+          showResultsFromJob(entry.data, entry.fileName);
+        }
+      });
+    </script>
+  </body>
 </html>

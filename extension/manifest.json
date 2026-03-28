@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Videosum",
+  "version": "1.0.0",
+  "description": "AI video summarizer — key moments, trailers, highlights, action items, chapters and more.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://m.youtube.com/*",
+    "http://127.0.0.1:3847/*",
+    "http://localhost:3847/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Videosum"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
+      "js": ["content/youtube.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

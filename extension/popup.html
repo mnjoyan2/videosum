@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Videosum</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0c0e12;
+      --surface: #141820;
+      --surface-hover: #1a2230;
+      --border: #2a3344;
+      --text: #eef1f6;
+      --muted: #8b95a8;
+      --accent: #4da3ff;
+      --accent-soft: rgba(77, 163, 255, 0.14);
+      --success: #3dd68c;
+      --success-soft: rgba(61, 214, 140, 0.12);
+      --warn: #e8b84a;
+      --warn-soft: rgba(232, 184, 74, 0.12);
+      --danger: #ff6b7a;
+      --danger-soft: rgba(255, 107, 122, 0.12);
+      --radius: 12px;
+      --radius-sm: 8px;
+      --shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      width: 400px;
+      min-height: 420px;
+      max-height: 580px;
+      font: 13px/1.45 "Source Sans 3", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+    }
+    .app {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+    .header {
+      padding: 16px 18px 14px;
+      background: linear-gradient(180deg, #121826 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-mark {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent) 0%, #2563eb 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: "Outfit", sans-serif;
+      font-weight: 700;
+      font-size: 15px;
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(77, 163, 255, 0.35);
+    }
+    .brand-text h1 {
+      font-family: "Outfit", sans-serif;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin: 0;
+      line-height: 1.15;
+    }
+    .brand-text p {
+      margin: 2px 0 0;
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.3;
+    }
+    .queue-badge {
+      font-family: "Outfit", sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .queue-badge.has-items {
+      background: var(--accent-soft);
+      border-color: rgba(77, 163, 255, 0.35);
+      color: var(--accent);
+    }
+    .scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 16px 16px;
+      min-height: 0;
+    }
+    .scroll::-webkit-scrollbar { width: 6px; }
+    .scroll::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 14px 12px;
+      margin-bottom: 12px;
+      box-shadow: var(--shadow);
+    }
+    .panel:last-of-type { margin-bottom: 0; }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .panel-title {
+      font-family: "Outfit", sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .field {
+      margin-bottom: 0;
+    }
+    .field-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .field label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .field-hint {
+      font-size: 11px;
+      color: var(--muted);
+      margin-top: 6px;
+      line-height: 1.35;
+    }
+    input[type="url"], input[type="number"] {
+      width: 100%;
+      padding: 9px 11px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font: 13px "Source Sans 3", system-ui, sans-serif;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    input[type="number"] {
+      width: 88px;
+      flex-shrink: 0;
+    }
+    .duration-wrap {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+    }
+    .duration-wrap .field { flex: 1; min-width: 0; }
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    button {
+      font-family: "Source Sans 3", system-ui, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--surface-hover);
+      color: var(--text);
+      padding: 8px 14px;
+      transition: background 0.12s, border-color 0.12s, transform 0.08s;
+    }
+    button:hover { background: #222b3a; border-color: #3d4a5f; }
+    button:active { transform: scale(0.98); }
+    button.primary {
+      background: linear-gradient(180deg, #5eb0ff 0%, var(--accent) 100%);
+      border-color: transparent;
+      color: #061018;
+    }
+    button.primary:hover {
+      filter: brightness(1.06);
+      border-color: transparent;
+    }
+    button.ghost {
+      background: transparent;
+      color: var(--muted);
+    }
+    button.ghost:hover {
+      background: var(--surface-hover);
+      color: var(--text);
+    }
+    button.danger {
+      border-color: rgba(255, 107, 122, 0.4);
+      color: var(--danger);
+      background: transparent;
+      padding: 6px 10px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    button.danger:hover {
+      background: var(--danger-soft);
+      border-color: var(--danger);
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .list-wrap {
+      margin-top: 2px;
+    }
+    ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    ul::-webkit-scrollbar { width: 5px; }
+    ul::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    li.card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      margin-bottom: 8px;
+      background: var(--bg);
+    }
+    li.card:last-child { margin-bottom: 0; }
+    li.card.state-queued { border-left: 3px solid var(--warn); }
+    li.card.state-processing { border-left: 3px solid var(--accent); }
+    li.card.state-done { border-left: 3px solid var(--success); }
+    li.card.state-failed { border-left: 3px solid var(--danger); }
+    li .t {
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 4px;
+      line-height: 1.3;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    li .u {
+      font-size: 11px;
+      color: var(--muted);
+      word-break: break-all;
+      line-height: 1.35;
+    }
+    li .meta {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .status-pill {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-radius: 999px;
+    }
+    .status-pill.queued { background: var(--warn-soft); color: var(--warn); }
+    .status-pill.processing { background: var(--accent-soft); color: var(--accent); }
+    .status-pill.done { background: var(--success-soft); color: var(--success); }
+    .status-pill.failed { background: var(--danger-soft); color: var(--danger); }
+    li .mode-badge {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: var(--surface-hover);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    li .err {
+      color: var(--danger);
+      font-size: 11px;
+      margin-top: 8px;
+      padding: 8px;
+      border-radius: 6px;
+      background: var(--danger-soft);
+      line-height: 1.35;
+    }
+    li .actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+    li .actions button {
+      padding: 7px 12px;
+      font-size: 11px;
+    }
+    .empty {
+      text-align: center;
+      padding: 28px 16px 20px;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-sm);
+      background: rgba(0, 0, 0, 0.2);
+    }
+    .empty-icon {
+      font-size: 32px;
+      line-height: 1;
+      margin-bottom: 10px;
+      opacity: 0.85;
+    }
+    .empty-title {
+      font-family: "Outfit", sans-serif;
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+    .empty p {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .footer {
+      padding: 10px 16px 14px;
+      border-top: 1px solid var(--border);
+      background: var(--bg);
+      flex-shrink: 0;
+    }
+    details.server-details {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      overflow: hidden;
+    }
+    details.server-details summary {
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      cursor: pointer;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    details.server-details summary::-webkit-details-marker { display: none; }
+    details.server-details summary::after {
+      content: "▸";
+      font-size: 10px;
+      opacity: 0.6;
+      display: inline-block;
+      transition: transform 0.15s ease;
+    }
+    details.server-details[open] summary::after { transform: rotate(90deg); }
+    details.server-details[open] summary { color: var(--text); border-bottom: 1px solid var(--border); }
+    .server-inner { padding: 12px; }
+    .server-inner label { margin-bottom: 6px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="header-top">
+        <div class="brand">
+          <div class="brand-mark">V</div>
+          <div class="brand-text">
+            <h1>Videosum</h1>
+            <p>AI summaries from YouTube</p>
+          </div>
+        </div>
+        <span class="queue-badge" id="queueBadge">0 in queue</span>
+      </div>
+    </header>
+
+    <div class="scroll">
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Output length</span>
+        </div>
+        <div class="field-row duration-wrap">
+          <div class="field" style="flex:0 0 auto">
+            <label for="targetMinutes">Target minutes</label>
+            <input type="number" id="targetMinutes" min="0.5" max="120" step="0.5" placeholder="Auto" />
+          </div>
+        </div>
+        <p class="field-hint">Leave empty so each summarization style uses a sensible default length. Set a number to cap all jobs.</p>
+        <div class="btn-row">
+          <button type="button" class="primary" id="retryBtn">Retry failed / queued</button>
+          <button type="button" class="ghost" id="clearDone">Clear completed</button>
+        </div>
+      </section>
+
+      <section class="panel panel-queue">
+        <div class="panel-head">
+          <span class="panel-title">Jobs</span>
+        </div>
+        <div class="list-wrap">
+          <ul id="list"></ul>
+          <div class="empty" id="empty">
+            <div class="empty-icon">▶</div>
+            <div class="empty-title">Nothing queued yet</div>
+            <p>On YouTube, hover a video and tap the summarize control, then pick a style (key moments, trailer, etc.). Jobs show up here.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="footer">
+      <details class="server-details">
+        <summary>Server connection</summary>
+        <div class="server-inner">
+          <div class="field">
+            <label for="baseUrl">Base URL</label>
+            <input type="url" id="baseUrl" placeholder="https://your-app.railway.app" autocomplete="off" />
+          </div>
+          <p class="field-hint" style="margin-top:8px;margin-bottom:0">Point to your deployed server URL (e.g. <code style="font-size:11px;color:var(--accent)">https://your-app.railway.app</code>) or <code style="font-size:11px;color:var(--accent)">http://127.0.0.1:3847</code> for local dev.</p>
+        </div>
+      </details>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
