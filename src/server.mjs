@@ -197,12 +197,13 @@ async function startJobPipeline({
   inputPath,
   targetMinutes,
   mode,
+  apiKey,
 }) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
+  const resolvedKey = apiKey || process.env.OPENAI_API_KEY;
+  if (!resolvedKey) {
     setJob(jobId, {
       status: "failed",
-      error: "OPENAI_API_KEY is not configured.",
+      error: "No OpenAI API key provided. Set one in the extension/app settings.",
     });
     return;
   }
@@ -212,7 +213,7 @@ async function startJobPipeline({
   try {
     const outputDir = path.join(jobsRoot, jobId);
     const result = await runSummaryPipeline({
-      apiKey,
+      apiKey: resolvedKey,
       inputPath,
       outputDir,
       targetMinutes: targetMinutes ?? null,
@@ -242,7 +243,7 @@ const app = express();
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Api-Key");
   if (req.method === "OPTIONS") {
     res.status(204).end();
     return;
@@ -277,11 +278,7 @@ app.post("/api/jobs", (req, res, next) => {
   }
 }, async (req, res) => {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      res.status(500).json({ error: "OPENAI_API_KEY is not configured." });
-      return;
-    }
+    const apiKey = String(req.body?.apiKey || req.headers["x-api-key"] || "").trim() || null;
 
     const rawTarget = req.body?.targetMinutes;
     const targetMinutes =
@@ -299,6 +296,7 @@ app.post("/api/jobs", (req, res, next) => {
         inputPath: req.file.path,
         targetMinutes,
         mode,
+        apiKey,
       });
       res.status(201).json({ jobId });
       return;
@@ -332,6 +330,7 @@ app.post("/api/jobs", (req, res, next) => {
           inputPath,
           targetMinutes,
           mode,
+          apiKey,
         });
       } catch (e) {
         setJob(jobId, {
@@ -378,9 +377,10 @@ app.post("/api/summarize", (req, res, next) => {
   makeUpload(jobId).single("video")(req, res, next);
 }, async (req, res) => {
   try {
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = String(req.body?.apiKey || req.headers["x-api-key"] || "").trim()
+      || process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      res.status(500).json({ error: "OPENAI_API_KEY is not configured." });
+      res.status(400).json({ error: "No OpenAI API key provided. Set one in the app settings." });
       return;
     }
     if (!req.file) {

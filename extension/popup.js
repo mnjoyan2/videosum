@@ -1,5 +1,6 @@
 const baseUrlEl = document.getElementById("baseUrl");
 const targetMinutesEl = document.getElementById("targetMinutes");
+const apiKeyEl = document.getElementById("apiKey");
 const retryBtn = document.getElementById("retryBtn");
 const clearDoneBtn = document.getElementById("clearDone");
 const listEl = document.getElementById("list");
@@ -32,6 +33,9 @@ function render(state) {
   baseUrlEl.value = state.baseUrl || "http://127.0.0.1:3847";
   const tv = state.targetMinutes;
   targetMinutesEl.value = tv !== "" && tv != null ? tv : "";
+  if (apiKeyEl && !apiKeyEl.matches(":focus")) {
+    apiKeyEl.value = state.apiKey || "";
+  }
 
   listEl.innerHTML = "";
   const q = state.queue || [];
@@ -118,6 +122,10 @@ function refresh() {
 
 baseUrlEl.addEventListener("change", () => {
   chrome.runtime.sendMessage({ type: "SET_SETTINGS", baseUrl: baseUrlEl.value });
+});
+
+apiKeyEl.addEventListener("change", () => {
+  chrome.runtime.sendMessage({ type: "SET_SETTINGS", apiKey: apiKeyEl.value.trim() });
 });
 
 targetMinutesEl.addEventListener("change", () => {

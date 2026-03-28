@@ -598,6 +598,20 @@
           </div>
           <div class="controls">
             <div class="field field-grow">
+              <label for="apiKey">OpenAI API key</label>
+              <input
+                id="apiKey"
+                type="password"
+                placeholder="sk-..."
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <p class="field-hint">
+                Stored in your browser only. Get one at
+                <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent)">platform.openai.com</a>.
+              </p>
+            </div>
+            <div class="field field-grow">
               <label for="summaryMode">Summarization type</label>
               <select id="summaryMode" name="mode">
                 <option value="key_moments">
@@ -623,6 +637,7 @@
                 Same list as the browser extension. Each mode has its own
                 default length unless you set target minutes below.
               </p>
+            </div>
             </div>
             <div class="field">
               <label for="targetMinutes">Target minutes</label>
@@ -709,6 +724,7 @@
       const form = document.getElementById("form");
       const videoInput = document.getElementById("video");
       const fileLabel = document.getElementById("fileLabel");
+      const apiKeyEl = document.getElementById("apiKey");
       const summaryModeEl = document.getElementById("summaryMode");
       const targetMinutesEl = document.getElementById("targetMinutes");
       const submit = document.getElementById("submit");
@@ -725,6 +741,17 @@
       const queuePanel = document.getElementById("queuePanel");
       const queueList = document.getElementById("queueList");
       const completedJobs = new Map();
+
+      const STORED_API_KEY = "videosum_api_key";
+      apiKeyEl.value = localStorage.getItem(STORED_API_KEY) || "";
+      apiKeyEl.addEventListener("change", () => {
+        const v = apiKeyEl.value.trim();
+        if (v) {
+          localStorage.setItem(STORED_API_KEY, v);
+        } else {
+          localStorage.removeItem(STORED_API_KEY);
+        }
+      });
 
       async function loadSummaryModes() {
         try {
@@ -877,6 +904,10 @@
         const fd = new FormData();
         fd.append("video", file);
         fd.append("mode", summaryModeEl.value);
+        const apiKey = apiKeyEl.value.trim();
+        if (apiKey) {
+          fd.append("apiKey", apiKey);
+        }
         const tm = targetMinutesEl.value.trim();
         if (tm !== "") {
           fd.append("targetMinutes", tm);
@@ -906,6 +937,11 @@
         const files = Array.from(videoInput.files || []);
         if (!files.length) {
           err.textContent = "Choose at least one video file.";
+          err.classList.remove("hidden");
+          return;
+        }
+        if (!apiKeyEl.value.trim()) {
+          err.textContent = "Enter your OpenAI API key above.";
           err.classList.remove("hidden");
           return;
         }

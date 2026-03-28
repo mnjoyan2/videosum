@@ -3,6 +3,7 @@ const STORAGE_KEY = "videosumState";
 const defaultState = () => ({
   baseUrl: "http://127.0.0.1:3847",
   targetMinutes: "",
+  apiKey: "",
   queue: [],
 });
 
@@ -99,7 +100,10 @@ async function submitQueued() {
       try {
         const res = await fetch(`${baseUrl}/api/jobs`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(state.apiKey ? { "X-Api-Key": state.apiKey } : {}),
+          },
           body: JSON.stringify({
             url: item.url,
             targetMinutes: state.targetMinutes !== "" ? state.targetMinutes : undefined,
@@ -183,6 +187,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       const state = await loadState();
       if (msg.baseUrl != null) {
         state.baseUrl = normalizeBaseUrl(msg.baseUrl);
+      }
+      if (msg.apiKey != null) {
+        state.apiKey = String(msg.apiKey).trim();
       }
       if (msg.targetMinutes != null) {
         const raw = String(msg.targetMinutes).trim();
