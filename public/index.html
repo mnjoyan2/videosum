@@ -41,13 +41,6 @@
         font-family: var(--font);
         font-size: 15px;
         line-height: 1.5;
-        background: var(--bg);
-        color: var(--text);
-      }
-      .bg-mesh {
-        position: fixed;
-        inset: 0;
-        pointer-events: none;
         background:
           radial-gradient(
             ellipse 80% 50% at 50% -20%,
@@ -60,7 +53,10 @@
             transparent
           ),
           var(--bg);
-        z-index: 0;
+        color: var(--text);
+      }
+      .bg-mesh {
+        display: none;
       }
       .wrap {
         position: relative;
@@ -442,6 +438,35 @@
       .card .panel-head h2 {
         font-size: 0.95rem;
       }
+      .tab-row {
+        display: inline-flex;
+        gap: 0.45rem;
+        padding: 0.3rem;
+        border-radius: 999px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        margin-bottom: 1rem;
+      }
+      .tab-btn {
+        border: none;
+        background: transparent;
+        color: var(--muted);
+        font: inherit;
+        font-weight: 600;
+        padding: 0.55rem 0.95rem;
+        border-radius: 999px;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+      .tab-btn.is-active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .tab-panel.hidden {
+        display: none;
+      }
       .transcript-list {
         max-height: 420px;
         overflow-y: auto;
@@ -679,9 +704,40 @@
               <h2>Transcript</h2>
             </div>
             <div class="panel-body">
-              <ul class="transcript-list" id="segments"></ul>
-              <p class="subhead">Full text</p>
-              <div class="fulltext-box summary-body" id="fullText"></div>
+              <div class="tab-row" role="tablist" aria-label="Transcript views">
+                <button
+                  type="button"
+                  class="tab-btn is-active"
+                  id="tabFull"
+                  data-tab-target="fullTranscriptTab"
+                  role="tab"
+                  aria-selected="true"
+                >
+                  Full transcript
+                </button>
+                <button
+                  type="button"
+                  class="tab-btn"
+                  id="tabSummary"
+                  data-tab-target="summaryTranscriptTab"
+                  role="tab"
+                  aria-selected="false"
+                >
+                  Summarized transcript
+                </button>
+              </div>
+
+              <div class="tab-panel" id="fullTranscriptTab" role="tabpanel">
+                <ul class="transcript-list" id="segments"></ul>
+                <p class="subhead">Full text</p>
+                <div class="fulltext-box summary-body" id="fullText"></div>
+              </div>
+
+              <div class="tab-panel hidden" id="summaryTranscriptTab" role="tabpanel">
+                <ul class="transcript-list" id="summarySegments"></ul>
+                <p class="subhead">Summarized text</p>
+                <div class="fulltext-box summary-body" id="summaryTranscriptText"></div>
+              </div>
             </div>
           </div>
           <div class="panel card">
@@ -733,13 +789,17 @@
       const results = document.getElementById("results");
       const meta = document.getElementById("meta");
       const segmentsEl = document.getElementById("segments");
+      const summarySegmentsEl = document.getElementById("summarySegments");
       const fullTextEl = document.getElementById("fullText");
+      const summaryTranscriptTextEl = document.getElementById("summaryTranscriptText");
       const summaryText = document.getElementById("summaryText");
       const clipsEl = document.getElementById("clips");
       const download = document.getElementById("download");
       const summaryPlayer = document.getElementById("summaryPlayer");
       const queuePanel = document.getElementById("queuePanel");
       const queueList = document.getElementById("queueList");
+      const transcriptTabs = Array.from(document.querySelectorAll(".tab-btn"));
+      const transcriptPanels = Array.from(document.querySelectorAll(".tab-panel"));
       const completedJobs = new Map();
 
       const STORED_API_KEY = "videosum_api_key";
@@ -808,6 +868,39 @@
         return d.innerHTML;
       }
 
+      function setTranscriptTab(targetId) {
+        transcriptTabs.forEach((tab) => {
+          const active = tab.dataset.tabTarget === targetId;
+          tab.classList.toggle("is-active", active);
+          tab.setAttribute("aria-selected", active ? "true" : "false");
+        });
+        transcriptPanels.forEach((panel) => {
+          panel.classList.toggle("hidden", panel.id !== targetId);
+        });
+      }
+
+      transcriptTabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          setTranscriptTab(tab.dataset.tabTarget);
+        });
+      });
+
+      function buildSummarizedTranscript(data) {
+        const segments = Array.isArray(data.segments) ? data.segments : [];
+        const clips = Array.isArray(data.normalizedClips) ? data.normalizedClips : [];
+        if (!segments.length || !clips.length) {
+          return [];
+        }
+
+        return segments.filter((segment) =>
+          clips.some(
+            (clip) =>
+              Number(segment.start) < Number(clip.end) &&
+              Number(segment.end) > Number(clip.start),
+          ),
+        );
+      }
+
       function showResultsFromJob(data, sourceLabel) {
         meta.innerHTML = [
           sourceLabel
@@ -836,6 +929,20 @@
           .join("");
 
         fullTextEl.textContent = data.fullText || "(no plain text in response)";
+        const summarizedTranscript = buildSummarizedTranscript(data);
+        summarySegmentsEl.innerHTML = summarizedTranscript.length
+          ? summarizedTranscript
+              .map(
+                (s) => `<li>
+                  <div class="ts">#${s.index} · ${formatSeconds(s.start)} → ${formatSeconds(s.end)}</div>
+                  <div>${escapeHtml(s.text)}</div>
+                </li>`,
+              )
+              .join("")
+          : `<li><div>No summarized transcript segments available.</div></li>`;
+        summaryTranscriptTextEl.textContent = summarizedTranscript.length
+          ? summarizedTranscript.map((segment) => segment.text).join(" ")
+          : "(no summarized transcript available)";
         summaryText.textContent = data.summary || "";
 
         clipsEl.innerHTML = (data.clips || [])
@@ -853,6 +960,7 @@
         summaryPlayer.src = vUrl;
         summaryPlayer.load();
 
+        setTranscriptTab("fullTranscriptTab");
         results.classList.remove("hidden");
         results.scrollIntoView({ behavior: "smooth", block: "start" });
       }

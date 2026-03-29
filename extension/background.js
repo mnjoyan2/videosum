@@ -1,7 +1,7 @@
 const STORAGE_KEY = "videosumState";
 
 const defaultState = () => ({
-  baseUrl: "http://127.0.0.1:3847",
+  baseUrl: "https://videosum-production-4f3c.up.railway.app",
   targetMinutes: "",
   apiKey: "",
   queue: [],

@@ -25,12 +25,12 @@ const MODE_LABELS = {
 
 function normalizeBaseUrl(url) {
   const u = String(url || "").trim();
-  if (!u) return "http://127.0.0.1:3847";
+  if (!u) return "https://videosum-production-4f3c.up.railway.app";
   return u.replace(/\/+$/, "");
 }
 
 function render(state) {
-  baseUrlEl.value = state.baseUrl || "http://127.0.0.1:3847";
+  baseUrlEl.value = state.baseUrl || "https://videosum-production-4f3c.up.railway.app";
   const tv = state.targetMinutes;
   targetMinutesEl.value = tv !== "" && tv != null ? tv : "";
   if (apiKeyEl && !apiKeyEl.matches(":focus")) {

@@ -7,8 +7,7 @@
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://m.youtube.com/*",
-    "http://127.0.0.1:3847/*",
-    "http://localhost:3847/*"
+    "https://videosum-production-4f3c.up.railway.app/*"
   ],
   "background": {
     "service_worker": "background.js"
