@@ -157,6 +157,10 @@
           background 0.2s,
           box-shadow 0.2s;
       }
+      .upload-zone.has-file {
+        border-color: rgba(77, 163, 255, 0.45);
+        background: var(--accent-soft);
+      }
       .upload-zone:hover,
       .upload-zone:focus-within {
         border-color: rgba(77, 163, 255, 0.45);
@@ -206,6 +210,69 @@
         align-items: flex-end;
         gap: 1rem;
         margin-top: 1.25rem;
+      }
+      .input-split {
+        display: grid;
+        grid-template-columns: 1.2fr 0.9fr;
+        gap: 1rem;
+        align-items: stretch;
+      }
+      @media (max-width: 900px) {
+        .input-split {
+          grid-template-columns: 1fr;
+        }
+      }
+      .url-box {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 140px;
+        padding: 1rem 1rem 1rem 1.1rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: var(--bg-elevated);
+      }
+      .url-box label {
+        display: block;
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin-bottom: 0.45rem;
+      }
+      .url-box input[type="url"] {
+        width: 100%;
+        padding: 0.8rem 0.9rem;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--border);
+        background: #0d1219;
+        color: var(--text);
+        font-family: var(--font);
+        font-size: 0.95rem;
+        outline: none;
+      }
+      .url-box input[type="url"]:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .input-or {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 0.7rem;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+      }
+      .input-or::before,
+      .input-or::after {
+        content: "";
+        display: block;
+        width: 1.7rem;
+        height: 1px;
+        background: var(--border);
       }
       .field label {
         display: block;
@@ -569,6 +636,42 @@
         max-height: min(52vh, 400px);
         display: block;
       }
+      .youtube-player-shell {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        background: #000;
+      }
+      .youtube-player-box {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background: #000;
+      }
+      .youtube-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.65rem;
+        margin-top: 1rem;
+        align-items: center;
+      }
+      .mini-btn {
+        border: 1px solid var(--border);
+        background: var(--bg-elevated);
+        color: var(--text);
+        border-radius: 999px;
+        padding: 0.55rem 0.9rem;
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .mini-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .youtube-status {
+        font-size: 0.84rem;
+        color: var(--muted);
+      }
       .video-actions {
         display: flex;
         flex-wrap: wrap;
@@ -604,21 +707,39 @@
           <h2>Upload &amp; run</h2>
         </div>
         <div class="panel-body">
-          <div class="upload-zone">
-            <input
-              id="video"
-              name="video"
-              type="file"
-              accept="video/*"
-              multiple
-            />
-            <div class="upload-ui">
-              <div class="icon">▶</div>
-              <p class="hint">
-                <strong>Drop videos here</strong> or click to browse — select
-                several files to queue them
+          <div class="input-split">
+            <div class="upload-zone" id="uploadZone">
+              <input
+                id="video"
+                name="video"
+                type="file"
+                accept="video/*"
+                multiple
+              />
+              <div class="upload-ui">
+                <div class="icon">▶</div>
+                <p class="hint">
+                  <strong>Drop videos here</strong> or click to browse —
+                  select several files to queue them
+                </p>
+                <p class="file-name" id="fileLabel">No files selected</p>
+              </div>
+            </div>
+            <div class="url-box">
+              <div class="input-or">or</div>
+              <label for="youtubeUrl">YouTube URL</label>
+              <input
+                id="youtubeUrl"
+                name="youtubeUrl"
+                type="url"
+                inputmode="url"
+                placeholder="https://www.youtube.com/watch?v=..."
+                spellcheck="false"
+              />
+              <p class="field-hint">
+                Paste a YouTube watch or Shorts link to summarize without
+                uploading a local file.
               </p>
-              <p class="file-name" id="fileLabel">No files selected</p>
             </div>
           </div>
           <div class="controls">
@@ -662,7 +783,6 @@
                 Same list as the browser extension. Each mode has its own
                 default length unless you set target minutes below.
               </p>
-            </div>
             </div>
             <div class="field">
               <label for="targetMinutes">Target minutes</label>
@@ -755,6 +875,26 @@
                   preload="metadata"
                 ></video>
               </div>
+              <div class="hidden" id="youtubeSummaryWrap">
+                <div class="youtube-player-shell">
+                  <div id="youtubeSummaryPlayer" class="youtube-player-box"></div>
+                </div>
+                <div class="youtube-controls">
+                  <button type="button" class="mini-btn" id="ytSummaryPlay">
+                    Play summary
+                  </button>
+                  <button type="button" class="mini-btn" id="ytSummaryPause">
+                    Pause
+                  </button>
+                  <button type="button" class="mini-btn" id="ytSummaryPrev">
+                    Previous clip
+                  </button>
+                  <button type="button" class="mini-btn" id="ytSummaryNext">
+                    Next clip
+                  </button>
+                  <span class="youtube-status" id="ytSummaryStatus"></span>
+                </div>
+              </div>
               <div class="video-actions">
                 <a class="download" id="download" href="#" download
                   >Download summary video</a
@@ -779,7 +919,9 @@
 
       const form = document.getElementById("form");
       const videoInput = document.getElementById("video");
+      const uploadZone = document.getElementById("uploadZone");
       const fileLabel = document.getElementById("fileLabel");
+      const youtubeUrlEl = document.getElementById("youtubeUrl");
       const apiKeyEl = document.getElementById("apiKey");
       const summaryModeEl = document.getElementById("summaryMode");
       const targetMinutesEl = document.getElementById("targetMinutes");
@@ -796,11 +938,22 @@
       const clipsEl = document.getElementById("clips");
       const download = document.getElementById("download");
       const summaryPlayer = document.getElementById("summaryPlayer");
+      const youtubeSummaryWrap = document.getElementById("youtubeSummaryWrap");
+      const ytSummaryPlay = document.getElementById("ytSummaryPlay");
+      const ytSummaryPause = document.getElementById("ytSummaryPause");
+      const ytSummaryPrev = document.getElementById("ytSummaryPrev");
+      const ytSummaryNext = document.getElementById("ytSummaryNext");
+      const ytSummaryStatus = document.getElementById("ytSummaryStatus");
       const queuePanel = document.getElementById("queuePanel");
       const queueList = document.getElementById("queueList");
       const transcriptTabs = Array.from(document.querySelectorAll(".tab-btn"));
       const transcriptPanels = Array.from(document.querySelectorAll(".tab-panel"));
       const completedJobs = new Map();
+      let youtubeApiReadyPromise = null;
+      let youtubeSummaryPlayer = null;
+      let youtubeSummaryClips = [];
+      let youtubeSummaryClipIndex = 0;
+      let youtubeSummaryMonitor = null;
 
       const STORED_API_KEY = "videosum_api_key";
       apiKeyEl.value = localStorage.getItem(STORED_API_KEY) || "";
@@ -853,19 +1006,186 @@
         const n = videoInput.files.length;
         if (!n) {
           fileLabel.textContent = "No files selected";
+          uploadZone.classList.remove("has-file");
           return;
         }
         if (n === 1) {
           fileLabel.textContent = videoInput.files[0].name;
+          uploadZone.classList.add("has-file");
           return;
         }
         fileLabel.textContent = `${n} files selected`;
+        uploadZone.classList.add("has-file");
+      });
+
+      youtubeUrlEl.addEventListener("input", () => {
+        if (youtubeUrlEl.value.trim()) {
+          videoInput.value = "";
+          fileLabel.textContent = "No files selected";
+          uploadZone.classList.remove("has-file");
+        }
       });
 
       function escapeHtml(s) {
         const d = document.createElement("div");
         d.textContent = s;
         return d.innerHTML;
+      }
+
+      function ensureYouTubeApi() {
+        if (window.YT?.Player) {
+          return Promise.resolve(window.YT);
+        }
+        if (youtubeApiReadyPromise) {
+          return youtubeApiReadyPromise;
+        }
+        youtubeApiReadyPromise = new Promise((resolve) => {
+          const prev = window.onYouTubeIframeAPIReady;
+          window.onYouTubeIframeAPIReady = () => {
+            if (typeof prev === "function") {
+              prev();
+            }
+            resolve(window.YT);
+          };
+          const script = document.createElement("script");
+          script.src = "https://www.youtube.com/iframe_api";
+          document.head.appendChild(script);
+        });
+        return youtubeApiReadyPromise;
+      }
+
+      function clearYouTubeSummaryMonitor() {
+        if (youtubeSummaryMonitor) {
+          clearInterval(youtubeSummaryMonitor);
+          youtubeSummaryMonitor = null;
+        }
+      }
+
+      function setYouTubeStatus(text) {
+        ytSummaryStatus.textContent = text || "";
+      }
+
+      function updateYouTubeButtons() {
+        const hasClips = youtubeSummaryClips.length > 0;
+        ytSummaryPlay.disabled = !hasClips;
+        ytSummaryPause.disabled = !hasClips;
+        ytSummaryPrev.disabled = !hasClips || youtubeSummaryClipIndex <= 0;
+        ytSummaryNext.disabled =
+          !hasClips || youtubeSummaryClipIndex >= youtubeSummaryClips.length - 1;
+      }
+
+      function stopYouTubeSummaryPlayback() {
+        clearYouTubeSummaryMonitor();
+        if (youtubeSummaryPlayer?.pauseVideo) {
+          youtubeSummaryPlayer.pauseVideo();
+        }
+      }
+
+      function jumpToYouTubeClip(index, shouldPlay = true) {
+        if (!youtubeSummaryPlayer || !youtubeSummaryClips.length) {
+          return;
+        }
+        youtubeSummaryClipIndex = Math.max(
+          0,
+          Math.min(index, youtubeSummaryClips.length - 1),
+        );
+        const clip = youtubeSummaryClips[youtubeSummaryClipIndex];
+        youtubeSummaryPlayer.seekTo(clip.start, true);
+        if (shouldPlay) {
+          youtubeSummaryPlayer.playVideo();
+        } else {
+          youtubeSummaryPlayer.pauseVideo();
+        }
+        setYouTubeStatus(
+          `Clip ${youtubeSummaryClipIndex + 1} of ${youtubeSummaryClips.length} • ${formatSeconds(clip.start)} to ${formatSeconds(clip.end)}`,
+        );
+        updateYouTubeButtons();
+      }
+
+      function startYouTubeSummaryMonitor() {
+        clearYouTubeSummaryMonitor();
+        youtubeSummaryMonitor = setInterval(() => {
+          if (!youtubeSummaryPlayer || !youtubeSummaryClips.length) {
+            return;
+          }
+          const clip = youtubeSummaryClips[youtubeSummaryClipIndex];
+          const current = Number(youtubeSummaryPlayer.getCurrentTime?.() || 0);
+          if (current >= clip.end) {
+            if (youtubeSummaryClipIndex < youtubeSummaryClips.length - 1) {
+              jumpToYouTubeClip(youtubeSummaryClipIndex + 1, true);
+            } else {
+              stopYouTubeSummaryPlayback();
+              setYouTubeStatus("Summary finished.");
+              updateYouTubeButtons();
+            }
+          }
+        }, 250);
+      }
+
+      async function showYouTubeSummaryPlayer(videoId, clips) {
+        youtubeSummaryClips = Array.isArray(clips) ? clips : [];
+        youtubeSummaryClipIndex = 0;
+        updateYouTubeButtons();
+
+        if (!videoId || !youtubeSummaryClips.length) {
+          youtubeSummaryWrap.classList.add("hidden");
+          return;
+        }
+
+        youtubeSummaryWrap.classList.remove("hidden");
+        setYouTubeStatus(
+          `Ready to play ${youtubeSummaryClips.length} summarized clip${youtubeSummaryClips.length === 1 ? "" : "s"}.`,
+        );
+
+        await ensureYouTubeApi();
+
+        const firstClip = youtubeSummaryClips[0];
+        if (!youtubeSummaryPlayer) {
+          youtubeSummaryPlayer = new window.YT.Player("youtubeSummaryPlayer", {
+            videoId,
+            playerVars: {
+              autoplay: 0,
+              controls: 0,
+              rel: 0,
+              modestbranding: 1,
+              iv_load_policy: 3,
+            },
+            events: {
+              onReady: () => {
+                youtubeSummaryPlayer.cueVideoById({
+                  videoId,
+                  startSeconds: firstClip.start,
+                });
+              },
+              onStateChange: (event) => {
+                if (event.data === window.YT.PlayerState.PLAYING) {
+                  startYouTubeSummaryMonitor();
+                }
+                if (
+                  event.data === window.YT.PlayerState.PAUSED ||
+                  event.data === window.YT.PlayerState.ENDED
+                ) {
+                  clearYouTubeSummaryMonitor();
+                }
+              },
+            },
+          });
+        } else {
+          clearYouTubeSummaryMonitor();
+          youtubeSummaryPlayer.cueVideoById({
+            videoId,
+            startSeconds: firstClip.start,
+          });
+        }
+      }
+
+      function hideYouTubeSummaryPlayer() {
+        youtubeSummaryWrap.classList.add("hidden");
+        stopYouTubeSummaryPlayback();
+        youtubeSummaryClips = [];
+        youtubeSummaryClipIndex = 0;
+        setYouTubeStatus("");
+        updateYouTubeButtons();
       }
 
       function setTranscriptTab(targetId) {
@@ -883,6 +1203,27 @@
         tab.addEventListener("click", () => {
           setTranscriptTab(tab.dataset.tabTarget);
         });
+      });
+
+      ytSummaryPlay.addEventListener("click", () => {
+        jumpToYouTubeClip(youtubeSummaryClipIndex, true);
+      });
+
+      ytSummaryPause.addEventListener("click", () => {
+        stopYouTubeSummaryPlayback();
+        if (youtubeSummaryClips.length) {
+          setYouTubeStatus(
+            `Paused on clip ${youtubeSummaryClipIndex + 1} of ${youtubeSummaryClips.length}.`,
+          );
+        }
+      });
+
+      ytSummaryPrev.addEventListener("click", () => {
+        jumpToYouTubeClip(youtubeSummaryClipIndex - 1, true);
+      });
+
+      ytSummaryNext.addEventListener("click", () => {
+        jumpToYouTubeClip(youtubeSummaryClipIndex + 1, true);
       });
 
       function buildSummarizedTranscript(data) {
@@ -954,11 +1295,26 @@
           )
           .join("");
 
-        const vUrl = data.videoUrl;
-        download.href = vUrl;
-        download.setAttribute("download", "summary-video.mp4");
-        summaryPlayer.src = vUrl;
-        summaryPlayer.load();
+        if (data.sourceType === "youtube" && data.youtubeVideoId) {
+          summaryPlayer.pause();
+          summaryPlayer.removeAttribute("src");
+          summaryPlayer.load();
+          summaryPlayer.parentElement.classList.add("hidden");
+          download.classList.add("hidden");
+          void showYouTubeSummaryPlayer(
+            data.youtubeVideoId,
+            data.normalizedClips || [],
+          );
+        } else {
+          hideYouTubeSummaryPlayer();
+          summaryPlayer.parentElement.classList.remove("hidden");
+          download.classList.remove("hidden");
+          const vUrl = data.videoUrl;
+          download.href = vUrl;
+          download.setAttribute("download", "summary-video.mp4");
+          summaryPlayer.src = vUrl;
+          summaryPlayer.load();
+        }
 
         setTranscriptTab("fullTranscriptTab");
         results.classList.remove("hidden");
@@ -1038,13 +1394,58 @@
         return { ok: true, fileName: file.name, data: final };
       }
 
+      async function runOneUrl(url, row) {
+        setQueueRowState(row, "starting");
+        const payload = {
+          url,
+          mode: summaryModeEl.value,
+        };
+        const apiKey = apiKeyEl.value.trim();
+        if (apiKey) {
+          payload.apiKey = apiKey;
+        }
+        const tm = targetMinutesEl.value.trim();
+        if (tm !== "") {
+          payload.targetMinutes = tm;
+        }
+
+        const res = await fetch("/api/jobs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(body.error || res.statusText || "URL submission failed");
+        }
+        const jobId = body.jobId;
+        setQueueRowState(row, "pending");
+        const final = await pollJob(jobId);
+        if (final.status === "failed") {
+          setQueueRowState(row, "failed", final.error || "Unknown error");
+          return { ok: false, sourceLabel: url };
+        }
+        setQueueRowState(row, "done");
+        completedJobs.set(jobId, { data: final, fileName: url });
+        row.dataset.jobId = jobId;
+        return { ok: true, sourceLabel: url, data: final };
+      }
+
       form.addEventListener("submit", async (e) => {
         e.preventDefault();
         err.classList.add("hidden");
         err.textContent = "";
         const files = Array.from(videoInput.files || []);
-        if (!files.length) {
-          err.textContent = "Choose at least one video file.";
+        const youtubeUrl = youtubeUrlEl.value.trim();
+        if (!files.length && !youtubeUrl) {
+          err.textContent = "Choose at least one video file or paste a YouTube URL.";
+          err.classList.remove("hidden");
+          return;
+        }
+        if (files.length && youtubeUrl) {
+          err.textContent = "Use either uploaded files or a YouTube URL, not both at the same time.";
           err.classList.remove("hidden");
           return;
         }
@@ -1058,11 +1459,15 @@
         summaryPlayer.pause();
         summaryPlayer.removeAttribute("src");
         summaryPlayer.load();
+        hideYouTubeSummaryPlayer();
 
         queuePanel.classList.remove("hidden");
         queueList.innerHTML = "";
-        const rows = files.map((f) => {
-          const row = makeQueueRow(f.name);
+        const queueEntries = files.length
+          ? files.map((file) => ({ label: file.name, file }))
+          : [{ label: youtubeUrl, url: youtubeUrl }];
+        const rows = queueEntries.map((entry) => {
+          const row = makeQueueRow(entry.label);
           queueList.appendChild(row);
           return row;
         });
@@ -1071,17 +1476,24 @@
         submit.disabled = true;
 
         try {
-          const outcomes = await Promise.all(
-            files.map((file, i) =>
-              runOneUpload(file, rows[i]).catch((x) => {
-                setQueueRowState(rows[i], "failed", x.message || String(x));
-                return { ok: false };
-              }),
-            ),
-          );
+          const outcomes = files.length
+            ? await Promise.all(
+                files.map((file, i) =>
+                  runOneUpload(file, rows[i]).catch((x) => {
+                    setQueueRowState(rows[i], "failed", x.message || String(x));
+                    return { ok: false };
+                  }),
+                ),
+              )
+            : await Promise.all([
+                runOneUrl(youtubeUrl, rows[0]).catch((x) => {
+                  setQueueRowState(rows[0], "failed", x.message || String(x));
+                  return { ok: false };
+                }),
+              ]);
           const firstOk = outcomes.find((o) => o && o.ok);
           if (firstOk) {
-            showResultsFromJob(firstOk.data, firstOk.fileName);
+            showResultsFromJob(firstOk.data, firstOk.fileName || firstOk.sourceLabel);
           }
         } catch (x) {
           err.textContent = x.message || String(x);

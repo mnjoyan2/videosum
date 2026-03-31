@@ -10,7 +10,12 @@ import {
   runSummaryPipeline,
   DEFAULT_TARGET_MINUTES,
   DEFAULT_SUMMARY_MODE,
+  DEFAULT_SUMMARY_MODEL,
   SUMMARY_MODES,
+  summarizeTranscript,
+  buildClipsFromSummary,
+  enforceClipsMaxDuration,
+  clipsTotalDuration,
 } from "./pipeline.mjs";
 
 function normalizeSummaryMode(raw) {
@@ -27,7 +32,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const jobsRoot = path.join(root, "output", "jobs");
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const MAX_CONCURRENT_JOBS = Math.max(
   1,
@@ -81,16 +87,30 @@ function setJob(jobId, patch) {
 }
 
 function buildSuccessPayload(jobId, result) {
+  const fullText =
+    result.transcript.text ??
+    (Array.isArray(result.segments)
+      ? result.segments
+          .map((segment) => segment.text)
+          .filter(Boolean)
+          .join(" ")
+      : "");
+
   return {
     jobId,
-    fullText: result.transcript.text ?? "",
+    sourceType: result.sourceType || "upload",
+    fullText,
     language: result.transcript.language ?? null,
     duration: result.transcript.duration ?? null,
     segments: result.segments,
     summary: result.summary.summary,
     clips: result.summary.clips,
     normalizedClips: result.clips,
-    videoUrl: `/api/jobs/${jobId}/summary-video.mp4`,
+    videoUrl: result.paths?.video
+      ? `/api/jobs/${jobId}/summary-video.mp4`
+      : null,
+    youtubeVideoId: result.youtubeVideoId ?? null,
+    youtubeWatchUrl: result.youtubeWatchUrl ?? null,
   };
 }
 
@@ -146,13 +166,7 @@ async function runYtDlp(url, outDir) {
   await new Promise((resolve, reject) => {
     const child = spawn(
       "yt-dlp",
-      [
-        "-o",
-        template,
-        "--no-playlist",
-        "--no-warnings",
-        url,
-      ],
+      ["-o", template, "--no-playlist", "--no-warnings", url],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
     let stderr = "";
@@ -174,18 +188,302 @@ async function runYtDlp(url, outDir) {
         resolve();
         return;
       }
-      reject(
-        new Error(
-          stderr.trim() || `yt-dlp exited with code ${code}.`,
-        ),
-      );
+      reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}.`));
     });
   });
 }
 
+async function runYtDlpJson(url) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      "yt-dlp",
+      ["--dump-single-json", "--skip-download", "--no-warnings", url],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", (err) => {
+      reject(
+        new Error(
+          err.code === "ENOENT"
+            ? "yt-dlp is not installed or not in PATH."
+            : err.message,
+        ),
+      );
+    });
+    child.on("exit", (code) => {
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}.`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (error) {
+        reject(new Error(`Failed to parse yt-dlp metadata: ${error.message}`));
+      }
+    });
+  });
+}
+
+function pickCaptionTrack(info) {
+  const subtitles = info?.subtitles || {};
+  const automatic = info?.automatic_captions || {};
+  const originalLanguage = String(
+    info?.language || info?.requested_subtitles || "",
+  )
+    .trim()
+    .toLowerCase();
+
+  const candidates = [];
+  const pushTracks = (source, table, sourceWeight) => {
+    for (const [language, tracks] of Object.entries(table)) {
+      if (!Array.isArray(tracks)) {
+        continue;
+      }
+      for (const track of tracks) {
+        const ext = String(track?.ext || "").toLowerCase();
+        const url = String(track?.url || "").trim();
+        if (!url) {
+          continue;
+        }
+        const lang = String(language || "").toLowerCase();
+        let score = sourceWeight;
+        if (ext === "json3" || ext === "srv3") {
+          score += 40;
+        } else if (ext === "vtt") {
+          score += 25;
+        }
+        if (lang === originalLanguage && originalLanguage) {
+          score += 35;
+        }
+        if (lang === "en" || lang.startsWith("en-")) {
+          score += 20;
+        }
+        if (lang.includes("orig")) {
+          score += 10;
+        }
+        candidates.push({
+          source,
+          language,
+          ext,
+          url,
+          score,
+        });
+      }
+    }
+  };
+
+  pushTracks("subtitles", subtitles, 100);
+  pushTracks("automatic_captions", automatic, 70);
+  candidates.sort((left, right) => right.score - left.score);
+  return candidates[0] || null;
+}
+
+function parseYouTubeJson3Transcript(raw) {
+  const payload = JSON.parse(raw);
+  const segments = [];
+
+  for (const event of payload?.events || []) {
+    const parts = Array.isArray(event?.segs) ? event.segs : [];
+    const text = parts
+      .map((part) => String(part?.utf8 || ""))
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const start = Number(event?.tStartMs) / 1000;
+    const duration = Number(event?.dDurationMs) / 1000;
+    const end = start + duration;
+
+    if (
+      !text ||
+      !Number.isFinite(start) ||
+      !Number.isFinite(end) ||
+      end <= start
+    ) {
+      continue;
+    }
+
+    segments.push({
+      start,
+      end,
+      text,
+    });
+  }
+
+  return segments;
+}
+
+function parseTimestampToSeconds(value) {
+  const match = String(value)
+    .trim()
+    .match(/^(?:(\d+):)?(\d{2}):(\d{2})(?:\.(\d{1,3}))?$/);
+  if (!match) {
+    return null;
+  }
+  const hours = Number(match[1] || 0);
+  const minutes = Number(match[2] || 0);
+  const seconds = Number(match[3] || 0);
+  const millis = Number((match[4] || "0").padEnd(3, "0"));
+  return hours * 3600 + minutes * 60 + seconds + millis / 1000;
+}
+
+function parseWebVttTranscript(raw) {
+  const blocks = String(raw)
+    .replace(/\r/g, "")
+    .split("\n\n")
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  const segments = [];
+  for (const block of blocks) {
+    const lines = block
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const cueIndex = lines.findIndex((line) => line.includes("-->"));
+    if (cueIndex === -1) {
+      continue;
+    }
+    const timing = lines[cueIndex].split("-->").map((part) => part.trim());
+    if (timing.length !== 2) {
+      continue;
+    }
+    const start = parseTimestampToSeconds(timing[0]);
+    const end = parseTimestampToSeconds(timing[1].split(" ")[0]);
+    const text = lines
+      .slice(cueIndex + 1)
+      .join(" ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (
+      !text ||
+      !Number.isFinite(start) ||
+      !Number.isFinite(end) ||
+      end <= start
+    ) {
+      continue;
+    }
+
+    segments.push({ start, end, text });
+  }
+
+  return segments;
+}
+
+async function fetchYouTubeTranscript(parsed) {
+  const info = await runYtDlpJson(parsed.canonical);
+  const track = pickCaptionTrack(info);
+  if (!track) {
+    throw new Error(
+      "This YouTube video does not expose captions that can be summarized instantly.",
+    );
+  }
+
+  const response = await fetch(track.url);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to fetch YouTube captions: ${await response.text()}`,
+    );
+  }
+
+  const raw = await response.text();
+  let baseSegments = [];
+  if (track.ext === "json3" || track.ext === "srv3") {
+    baseSegments = parseYouTubeJson3Transcript(raw);
+  } else {
+    baseSegments = parseWebVttTranscript(raw);
+  }
+
+  const segments = baseSegments.map((segment, index) => ({
+    index,
+    start: segment.start,
+    end: segment.end,
+    text: segment.text,
+  }));
+
+  if (!segments.length) {
+    throw new Error(
+      "Captions were found, but no transcript segments could be parsed.",
+    );
+  }
+
+  return {
+    transcript: {
+      text: segments.map((segment) => segment.text).join(" "),
+      language: track.language || info?.language || null,
+      duration: Number(info?.duration) || null,
+    },
+    segments,
+    youtubeVideoId: parsed.videoId,
+    youtubeWatchUrl: parsed.canonical,
+  };
+}
+
+async function runYouTubeSummaryPipeline({
+  apiKey,
+  parsed,
+  targetMinutes,
+  mode,
+}) {
+  const transcriptBundle = await fetchYouTubeTranscript(parsed);
+  const modeConfig = SUMMARY_MODES[mode] || SUMMARY_MODES[DEFAULT_SUMMARY_MODE];
+  const resolvedMinutes =
+    targetMinutes != null &&
+    Number.isFinite(Number(targetMinutes)) &&
+    Number(targetMinutes) > 0
+      ? Number(targetMinutes)
+      : modeConfig.defaultMinutes;
+
+  const summary = await summarizeTranscript({
+    apiKey,
+    model: DEFAULT_SUMMARY_MODEL,
+    segments: transcriptBundle.segments,
+    targetMinutes: resolvedMinutes,
+    mode,
+  });
+
+  const targetSeconds = Math.max(20, Math.round(resolvedMinutes * 60));
+  let clips = buildClipsFromSummary(summary, transcriptBundle.segments);
+  clips = enforceClipsMaxDuration(clips, targetSeconds);
+  if (!clips.length) {
+    throw new Error(
+      "No valid summary clips were selected from the YouTube transcript.",
+    );
+  }
+
+  console.log(
+    `[videosum] YouTube instant summary duration ${clipsTotalDuration(clips).toFixed(1)}s`,
+  );
+
+  return {
+    sourceType: "youtube",
+    transcript: transcriptBundle.transcript,
+    segments: transcriptBundle.segments,
+    summary,
+    clips,
+    youtubeVideoId: transcriptBundle.youtubeVideoId,
+    youtubeWatchUrl: transcriptBundle.youtubeWatchUrl,
+    paths: {
+      video: null,
+    },
+  };
+}
+
 async function findDownloadedInputFile(outDir) {
   const files = await readdir(outDir);
-  const name = files.find((f) => f.startsWith("input.") && !f.endsWith(".part"));
+  const name = files.find(
+    (f) => f.startsWith("input.") && !f.endsWith(".part"),
+  );
   if (!name) {
     throw new Error("Download finished but input file was not found.");
   }
@@ -203,13 +501,16 @@ async function startJobPipeline({
   if (!resolvedKey) {
     setJob(jobId, {
       status: "failed",
-      error: "No OpenAI API key provided. Set one in the extension/app settings.",
+      error:
+        "No OpenAI API key provided. Set one in the extension/app settings.",
     });
     return;
   }
   await acquireSlot();
   setJob(jobId, { status: "running" });
-  console.log(`[videosum] job ${jobId} pipeline starting (mode: ${mode || DEFAULT_SUMMARY_MODE})`);
+  console.log(
+    `[videosum] job ${jobId} pipeline starting (mode: ${mode || DEFAULT_SUMMARY_MODE})`,
+  );
   try {
     const outputDir = path.join(jobsRoot, jobId);
     const result = await runSummaryPipeline({
@@ -233,6 +534,50 @@ async function startJobPipeline({
       result: null,
     });
     console.log(`[videosum] job ${jobId} failed: ${e.message || e}`);
+  } finally {
+    releaseSlot();
+  }
+}
+
+async function startYouTubeJobPipeline({
+  jobId,
+  parsed,
+  targetMinutes,
+  mode,
+  apiKey,
+}) {
+  const resolvedKey = apiKey || process.env.OPENAI_API_KEY;
+  if (!resolvedKey) {
+    setJob(jobId, {
+      status: "failed",
+      error:
+        "No OpenAI API key provided. Set one in the extension/app settings.",
+    });
+    return;
+  }
+  await acquireSlot();
+  setJob(jobId, { status: "running" });
+  console.log(
+    `[videosum] job ${jobId} instant youtube summary starting (mode: ${mode || DEFAULT_SUMMARY_MODE})`,
+  );
+  try {
+    const result = await runYouTubeSummaryPipeline({
+      apiKey: resolvedKey,
+      parsed,
+      targetMinutes: targetMinutes ?? null,
+      mode: mode || DEFAULT_SUMMARY_MODE,
+    });
+    setJob(jobId, {
+      status: "done",
+      result: buildSuccessPayload(jobId, result),
+      error: null,
+    });
+  } catch (e) {
+    setJob(jobId, {
+      status: "failed",
+      error: e.message || "Processing failed.",
+      result: null,
+    });
   } finally {
     releaseSlot();
   }
@@ -267,85 +612,82 @@ function jsonBody(req, res, next) {
   express.json()(req, res, next);
 }
 
-app.post("/api/jobs", (req, res, next) => {
-  const ct = req.headers["content-type"] || "";
-  if (ct.includes("multipart/form-data")) {
-    const jobId = randomUUID();
-    req.jobId = jobId;
-    makeUpload(jobId).single("video")(req, res, next);
-  } else {
-    jsonBody(req, res, next);
-  }
-}, async (req, res) => {
-  try {
-    const apiKey = String(req.body?.apiKey || req.headers["x-api-key"] || "").trim() || null;
-
-    const rawTarget = req.body?.targetMinutes;
-    const targetMinutes =
-      rawTarget != null && String(rawTarget).trim() !== ""
-        ? Number(rawTarget)
-        : null;
-    const mode = normalizeSummaryMode(req.body?.mode);
-
-    if (req.file) {
-      const jobId = req.jobId;
-      setJob(jobId, { status: "pending", result: null, error: null });
-      console.log(`[videosum] job ${jobId} created (upload)`);
-      void startJobPipeline({
-        jobId,
-        inputPath: req.file.path,
-        targetMinutes,
-        mode,
-        apiKey,
-      });
-      res.status(201).json({ jobId });
-      return;
+app.post(
+  "/api/jobs",
+  (req, res, next) => {
+    const ct = req.headers["content-type"] || "";
+    if (ct.includes("multipart/form-data")) {
+      const jobId = randomUUID();
+      req.jobId = jobId;
+      makeUpload(jobId).single("video")(req, res, next);
+    } else {
+      jsonBody(req, res, next);
     }
+  },
+  async (req, res) => {
+    try {
+      const apiKey =
+        String(req.body?.apiKey || req.headers["x-api-key"] || "").trim() ||
+        null;
 
-    const url = req.body?.url;
-    if (url == null || String(url).trim() === "") {
-      res.status(400).json({ error: "Provide url (JSON) or multipart video field." });
-      return;
-    }
+      const rawTarget = req.body?.targetMinutes;
+      const targetMinutes =
+        rawTarget != null && String(rawTarget).trim() !== ""
+          ? Number(rawTarget)
+          : null;
+      const mode = normalizeSummaryMode(req.body?.mode);
 
-    const parsed = parseAllowedVideoUrl(url);
-    if (!parsed) {
-      res.status(400).json({ error: "URL must be a supported YouTube watch or Shorts link." });
-      return;
-    }
-
-    const jobId = randomUUID();
-    const outputDir = path.join(jobsRoot, jobId);
-    await mkdir(outputDir, { recursive: true });
-
-    setJob(jobId, { status: "pending", result: null, error: null });
-    console.log(`[videosum] job ${jobId} created (url) ${parsed.canonical}`);
-
-    void (async () => {
-      try {
-        await runYtDlp(parsed.canonical, outputDir);
-        const inputPath = await findDownloadedInputFile(outputDir);
-        await startJobPipeline({
+      if (req.file) {
+        const jobId = req.jobId;
+        setJob(jobId, { status: "pending", result: null, error: null });
+        console.log(`[videosum] job ${jobId} created (upload)`);
+        void startJobPipeline({
           jobId,
-          inputPath,
+          inputPath: req.file.path,
           targetMinutes,
           mode,
           apiKey,
         });
-      } catch (e) {
-        setJob(jobId, {
-          status: "failed",
-          error: e.message || "Download or processing failed.",
-          result: null,
-        });
+        res.status(201).json({ jobId });
+        return;
       }
-    })();
 
-    res.status(201).json({ jobId });
-  } catch (e) {
-    res.status(500).json({ error: e.message || "Failed to create job." });
-  }
-});
+      const url = req.body?.url;
+      if (url == null || String(url).trim() === "") {
+        res
+          .status(400)
+          .json({ error: "Provide url (JSON) or multipart video field." });
+        return;
+      }
+
+      const parsed = parseAllowedVideoUrl(url);
+      if (!parsed) {
+        res
+          .status(400)
+          .json({
+            error: "URL must be a supported YouTube watch or Shorts link.",
+          });
+        return;
+      }
+
+      const jobId = randomUUID();
+      setJob(jobId, { status: "pending", result: null, error: null });
+      console.log(`[videosum] job ${jobId} created (url) ${parsed.canonical}`);
+
+      void startYouTubeJobPipeline({
+        jobId,
+        parsed,
+        targetMinutes,
+        mode,
+        apiKey,
+      });
+
+      res.status(201).json({ jobId });
+    } catch (e) {
+      res.status(500).json({ error: e.message || "Failed to create job." });
+    }
+  },
+);
 
 app.get("/api/jobs/:jobId", (req, res) => {
   const { jobId } = req.params;
@@ -371,45 +713,54 @@ app.get("/api/jobs/:jobId", (req, res) => {
   res.json(body);
 });
 
-app.post("/api/summarize", (req, res, next) => {
-  const jobId = randomUUID();
-  req.jobId = jobId;
-  makeUpload(jobId).single("video")(req, res, next);
-}, async (req, res) => {
-  try {
-    const apiKey = String(req.body?.apiKey || req.headers["x-api-key"] || "").trim()
-      || process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      res.status(400).json({ error: "No OpenAI API key provided. Set one in the app settings." });
-      return;
-    }
-    if (!req.file) {
-      res.status(400).json({ error: "No video file uploaded." });
-      return;
-    }
-    const jobId = req.jobId;
-    const outputDir = path.join(jobsRoot, jobId);
-    const rawTarget = req.body?.targetMinutes;
-    const targetMinutes =
-      rawTarget != null && String(rawTarget).trim() !== ""
-        ? Number(rawTarget)
-        : null;
-    const mode = normalizeSummaryMode(req.body?.mode);
+app.post(
+  "/api/summarize",
+  (req, res, next) => {
+    const jobId = randomUUID();
+    req.jobId = jobId;
+    makeUpload(jobId).single("video")(req, res, next);
+  },
+  async (req, res) => {
+    try {
+      const apiKey =
+        String(req.body?.apiKey || req.headers["x-api-key"] || "").trim() ||
+        process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        res
+          .status(400)
+          .json({
+            error: "No OpenAI API key provided. Set one in the app settings.",
+          });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ error: "No video file uploaded." });
+        return;
+      }
+      const jobId = req.jobId;
+      const outputDir = path.join(jobsRoot, jobId);
+      const rawTarget = req.body?.targetMinutes;
+      const targetMinutes =
+        rawTarget != null && String(rawTarget).trim() !== ""
+          ? Number(rawTarget)
+          : null;
+      const mode = normalizeSummaryMode(req.body?.mode);
 
-    const result = await runSummaryPipeline({
-      apiKey,
-      inputPath: req.file.path,
-      outputDir,
-      targetMinutes,
-      mode,
-      stitch: true,
-    });
+      const result = await runSummaryPipeline({
+        apiKey,
+        inputPath: req.file.path,
+        outputDir,
+        targetMinutes,
+        mode,
+        stitch: true,
+      });
 
-    res.json(buildSuccessPayload(jobId, result));
-  } catch (e) {
-    res.status(500).json({ error: e.message || "Processing failed." });
-  }
-});
+      res.json(buildSuccessPayload(jobId, result));
+    } catch (e) {
+      res.status(500).json({ error: e.message || "Processing failed." });
+    }
+  },
+);
 
 app.get("/api/jobs/:jobId/:filename", (req, res, next) => {
   const { jobId, filename } = req.params;

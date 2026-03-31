@@ -5,11 +5,13 @@ This app:
 - transcribes a video with timestamps using OpenAI Whisper
 - summarizes the transcript and picks key clips with the OpenAI API
 - stitches those clips into a shorter MP4 with `ffmpeg`
+- supports both local video uploads and YouTube URLs in the web UI
 
 ## Requirements
 
 - Node.js 20+
 - `ffmpeg`
+- `yt-dlp` for YouTube URL summarization in the web UI/server
 - `OPENAI_API_KEY`
 
 ## Usage
