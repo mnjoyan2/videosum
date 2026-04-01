@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Videosum",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AI video summarizer — key moments, trailers, highlights, action items, chapters and more.",
   "permissions": ["storage", "windows"],
   "host_permissions": [

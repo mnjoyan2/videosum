@@ -159,6 +159,20 @@ function parseAllowedVideoUrl(urlString) {
   return null;
 }
 
+function getYtDlpCookieArgs() {
+  const out = [];
+  const cookiesFile = String(process.env.YTDLP_COOKIES || "").trim();
+  const cookiesBrowser = String(
+    process.env.YTDLP_COOKIES_FROM_BROWSER || "",
+  ).trim();
+  if (cookiesFile) {
+    out.push("--cookies", cookiesFile);
+  } else if (cookiesBrowser) {
+    out.push("--cookies-from-browser", cookiesBrowser);
+  }
+  return out;
+}
+
 async function runYtDlp(url, outDir) {
   await mkdir(outDir, { recursive: true });
   const template = path.join(outDir, "input.%(ext)s");
@@ -166,7 +180,14 @@ async function runYtDlp(url, outDir) {
   await new Promise((resolve, reject) => {
     const child = spawn(
       "yt-dlp",
-      ["-o", template, "--no-playlist", "--no-warnings", url],
+      [
+        ...getYtDlpCookieArgs(),
+        "-o",
+        template,
+        "--no-playlist",
+        "--no-warnings",
+        url,
+      ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
     let stderr = "";
@@ -197,7 +218,13 @@ async function runYtDlpJson(url) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "yt-dlp",
-      ["--dump-single-json", "--skip-download", "--no-warnings", url],
+      [
+        ...getYtDlpCookieArgs(),
+        "--dump-single-json",
+        "--skip-download",
+        "--no-warnings",
+        url,
+      ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
 

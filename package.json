@@ -1,6 +1,6 @@
 {
   "name": "videosum",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Transcribe videos with timestamps, summarize them with OpenAI, and stitch a shorter highlight video with ffmpeg.",
