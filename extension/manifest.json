@@ -3,7 +3,7 @@
   "name": "Videosum",
   "version": "1.0.0",
   "description": "AI video summarizer — key moments, trailers, highlights, action items, chapters and more.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "windows"],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://m.youtube.com/*",

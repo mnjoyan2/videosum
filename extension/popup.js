@@ -15,12 +15,12 @@ const STATUS_LABEL = {
 };
 
 const MODE_LABELS = {
-  key_moments:         "⭐ Key moments",
-  short_highlights:    "⚡ Short highlights",
-  action_items:        "✅ Action items",
-  topic_chapters:      "📚 Topic chapters",
-  tutorial_essentials: "🎓 Tutorial essentials",
-  trailer:             "🎬 Trailer",
+  key_moments:         "Key moments",
+  short_highlights:    "Short highlights",
+  action_items:        "Action items",
+  topic_chapters:      "Topic chapters",
+  tutorial_essentials: "Tutorial essentials",
+  trailer:             "Trailer",
 };
 
 function normalizeBaseUrl(url) {

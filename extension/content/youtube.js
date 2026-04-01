@@ -2,12 +2,56 @@ const MARK_WATCH = "data-videosum-watch";
 const NS = "http://www.w3.org/2000/svg";
 
 const MODES = [
-  { id: "key_moments",         icon: "⭐", label: "Key moments",         desc: "Most important parts" },
-  { id: "short_highlights",    icon: "⚡", label: "Short highlights",     desc: "Fast, engaging clips" },
-  { id: "action_items",        icon: "✅", label: "Action items",         desc: "Tasks, decisions, deadlines" },
-  { id: "topic_chapters",      icon: "📚", label: "Topic chapters",       desc: "One clip per topic" },
-  { id: "tutorial_essentials", icon: "🎓", label: "Tutorial essentials",  desc: "Steps & demos only" },
-  { id: "trailer",             icon: "🎬", label: "Trailer",              desc: "Dramatic hook to climax" },
+  {
+    id: "key_moments",
+    label: "Key moments",
+    desc: "Most important parts",
+    paths: [
+      "M12 2l2.2 6.8h7.1l-5.7 4.1 2.2 6.9-6-4.4-6 4.4 2.2-6.9-5.7-4.1h7.1z",
+    ],
+  },
+  {
+    id: "short_highlights",
+    label: "Short highlights",
+    desc: "Fast, engaging clips",
+    paths: [
+      "M13 2L3 14h8l-1 8 10-12h-8l1-8z",
+    ],
+  },
+  {
+    id: "action_items",
+    label: "Action items",
+    desc: "Tasks, decisions, deadlines",
+    paths: [
+      "M9 11l3 3L22 4",
+      "M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
+    ],
+  },
+  {
+    id: "topic_chapters",
+    label: "Topic chapters",
+    desc: "One clip per topic",
+    paths: [
+      "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
+    ],
+  },
+  {
+    id: "tutorial_essentials",
+    label: "Tutorial essentials",
+    desc: "Steps & demos only",
+    paths: [
+      "M22 10v6M2 10l10-5 10 5-10 5z",
+      "M6 12v5a3 3 0 003 3h6a3 3 0 003-3v-5",
+    ],
+  },
+  {
+    id: "trailer",
+    label: "Trailer",
+    desc: "Dramatic hook to climax",
+    paths: [
+      "M4 4h16v16H4zM4 9h16M9 4v16",
+    ],
+  },
 ];
 
 function makeSvgIcon(size, color) {
@@ -22,6 +66,83 @@ function makeSvgIcon(size, color) {
   p.setAttribute("d", "M4 5h16v2H4V5zm0 5h10v2H4v-2zm0 5h14v2H4v-2z");
   svg.appendChild(p);
   return svg;
+}
+
+function makeModeIcon(paths) {
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("width", "22");
+  svg.setAttribute("height", "22");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.style.cssText = "display:block;flex-shrink:0;color:#a8a8a8;";
+  for (const d of paths) {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("fill", "none");
+    p.setAttribute("stroke", "currentColor");
+    p.setAttribute("stroke-width", "1.5");
+    p.setAttribute("stroke-linecap", "round");
+    p.setAttribute("stroke-linejoin", "round");
+    p.setAttribute("d", d);
+    svg.appendChild(p);
+  }
+  return svg;
+}
+
+const toastEl = (() => {
+  const el = document.createElement("div");
+  el.style.cssText = [
+    "position:fixed",
+    "z-index:2147483647",
+    "left:50%",
+    "bottom:24px",
+    "transform:translateX(-50%) translateY(120%)",
+    "max-width:min(92vw, 420px)",
+    "padding:12px 16px",
+    "border-radius:8px",
+    "font-family:Roboto,Arial,sans-serif",
+    "font-size:13px",
+    "line-height:1.4",
+    "box-shadow:0 4px 16px rgba(0,0,0,0.45)",
+    "pointer-events:none",
+    "opacity:0",
+    "transition:opacity 0.2s, transform 0.2s",
+  ].join(";");
+  document.body.appendChild(el);
+  return el;
+})();
+
+let toastTimer = null;
+
+function showToast(text, kind) {
+  clearTimeout(toastTimer);
+  toastEl.textContent = text;
+  const bg =
+    kind === "success"
+      ? "rgba(15,15,15,0.92)"
+      : kind === "error"
+        ? "rgba(40,0,0,0.92)"
+        : "rgba(15,15,15,0.92)";
+  const border =
+    kind === "success"
+      ? "1px solid rgba(62,166,255,0.45)"
+      : kind === "error"
+        ? "1px solid rgba(255,107,107,0.5)"
+        : "1px solid rgba(255,255,255,0.12)";
+  toastEl.style.background = bg;
+  toastEl.style.border = border;
+  toastEl.style.color = "#f1f1f1";
+  toastEl.style.opacity = "1";
+  toastEl.style.transform = "translateX(-50%) translateY(0)";
+  toastTimer = setTimeout(() => {
+    toastEl.style.opacity = "0";
+    toastEl.style.transform = "translateX(-50%) translateY(120%)";
+  }, 4200);
+}
+
+function openVideosumPopup() {
+  chrome.runtime.sendMessage({ type: "OPEN_VIDEOSUM_UI" }, () => {
+    void chrome.runtime.lastError;
+  });
 }
 
 function getVideoIdFromHref(href) {
@@ -76,7 +197,21 @@ function tileVideoId(tile) {
 function sendEnqueue(url, title, mode) {
   chrome.runtime.sendMessage(
     { type: "ADD_TO_QUEUE", payload: { url, title, mode } },
-    () => { void chrome.runtime.lastError; },
+    (response) => {
+      if (chrome.runtime.lastError) {
+        showToast("Could not reach the extension. Try reloading the page.", "error");
+        return;
+      }
+      if (response?.ok) {
+        if (response.duplicate) {
+          showToast("This video is already in your queue.", "success");
+        } else {
+          showToast("Video added to your queue. Summarization will start shortly.", "success");
+        }
+      } else {
+        showToast(response?.error || "Something went wrong.", "error");
+      }
+    },
   );
 }
 
@@ -134,8 +269,9 @@ function buildPopover() {
     row.addEventListener("mouseleave", () => { row.style.background = "transparent"; });
 
     const icon = document.createElement("span");
-    icon.style.cssText = "font-size:18px;width:24px;text-align:center;flex-shrink:0;";
-    icon.textContent = mode.icon;
+    icon.style.cssText =
+      "width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+    icon.appendChild(makeModeIcon(mode.paths));
 
     const text = document.createElement("span");
     text.style.cssText = "display:flex;flex-direction:column;gap:1px;";
@@ -255,6 +391,7 @@ function injectWatchButton() {
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    openVideosumPopup();
     if (popover.style.display !== "none") {
       hidePopover();
       return;
@@ -325,6 +462,7 @@ floatingBtn.addEventListener("click", (e) => {
   e.preventDefault();
   e.stopPropagation();
   if (!currentVid || !currentTile) return;
+  openVideosumPopup();
   if (popover.style.display !== "none") {
     hidePopover();
     return;

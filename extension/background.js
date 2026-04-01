@@ -135,6 +135,13 @@ async function addToQueue({ url, title, mode }) {
   if (!canonical) {
     return { ok: false, error: "Missing URL" };
   }
+  if (!String(state.apiKey || "").trim()) {
+    return {
+      ok: false,
+      error:
+        "Please add your OpenAI API key in the Videosum extension popup (click the puzzle icon, then Videosum).",
+    };
+  }
   if (state.queue.some((q) => q.url === canonical)) {
     return { ok: true, duplicate: true };
   }
@@ -165,7 +172,27 @@ async function startAll() {
   return { ok: true };
 }
 
+async function openVideosumUi() {
+  try {
+    await chrome.action.openPopup();
+  } catch {
+    try {
+      await chrome.windows.create({
+        url: chrome.runtime.getURL("popup.html"),
+        type: "popup",
+        width: 420,
+        height: 620,
+        focused: true,
+      });
+    } catch (_) {}
+  }
+}
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "OPEN_VIDEOSUM_UI") {
+    void openVideosumUi().then(() => sendResponse({ ok: true }));
+    return true;
+  }
   if (msg?.type === "ADD_TO_QUEUE") {
     void addToQueue(msg.payload || {}).then(sendResponse);
     return true;
