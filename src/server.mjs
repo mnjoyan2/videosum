@@ -216,6 +216,17 @@ function getYtDlpCookieArgs() {
   return out;
 }
 
+function ytDlpBotHint(message) {
+  const m = String(message || "").trim();
+  if (!m) {
+    return "Processing failed.";
+  }
+  if (!/sign in to confirm|not a bot/i.test(m)) {
+    return m;
+  }
+  return `${m}\n\nServer: set YTDLP_COOKIES (Netscape cookies file path), YTDLP_COOKIES_TEXT or YTDLP_COOKIES_TEXT_B64 (file contents), or YTDLP_COOKIES_FROM_BROWSER (e.g. chrome). See https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies`;
+}
+
 function logYtDlpCookieStatus() {
   const hasFile = String(process.env.YTDLP_COOKIES || "").trim();
   const args = getYtDlpCookieArgs();
@@ -247,6 +258,8 @@ async function runYtDlp(url, outDir) {
       "yt-dlp",
       [
         ...getYtDlpCookieArgs(),
+        "-f",
+        "bv*+ba[ext=webm]/bv*+ba/bestvideo+bestaudio/best",
         "-o",
         template,
         "--no-playlist",
@@ -271,6 +284,49 @@ async function runYtDlp(url, outDir) {
     child.on("exit", (code) => {
       if (code === 0) {
         console.log(`[videosum] yt-dlp finished`);
+        resolve();
+        return;
+      }
+      reject(new Error(stderr.trim() || `yt-dlp exited with code ${code}.`));
+    });
+  });
+}
+
+async function runYtDlpBestAudio(url, outDir) {
+  await mkdir(outDir, { recursive: true });
+  const template = path.join(outDir, "audio-only.%(ext)s");
+  console.log(`[videosum] yt-dlp downloading audio-only…`);
+  await new Promise((resolve, reject) => {
+    const child = spawn(
+      "yt-dlp",
+      [
+        ...getYtDlpCookieArgs(),
+        "-f",
+        "ba[ext=webm]/ba[acodec=opus]/ba/bestaudio",
+        "-o",
+        template,
+        "--no-playlist",
+        "--no-warnings",
+        url,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", (err) => {
+      reject(
+        new Error(
+          err.code === "ENOENT"
+            ? "yt-dlp is not installed or not in PATH."
+            : err.message,
+        ),
+      );
+    });
+    child.on("exit", (code) => {
+      if (code === 0) {
+        console.log(`[videosum] yt-dlp audio-only finished`);
         resolve();
         return;
       }
@@ -582,6 +638,17 @@ async function findDownloadedInputFile(outDir) {
   return path.join(outDir, name);
 }
 
+async function findAudioOnlyFile(outDir) {
+  const files = await readdir(outDir);
+  const name = files.find(
+    (f) => f.startsWith("audio-only.") && !f.endsWith(".part"),
+  );
+  if (!name) {
+    throw new Error("Audio-only download finished but file was not found.");
+  }
+  return path.join(outDir, name);
+}
+
 async function runYouTubeWhisperPipeline({
   jobId,
   apiKey,
@@ -593,9 +660,17 @@ async function runYouTubeWhisperPipeline({
   await mkdir(outputDir, { recursive: true });
   await runYtDlp(parsed.canonical, outputDir);
   const inputPath = await findDownloadedInputFile(outputDir);
+  let audioInputPath = null;
+  try {
+    await runYtDlpBestAudio(parsed.canonical, outputDir);
+    audioInputPath = await findAudioOnlyFile(outputDir);
+  } catch (e) {
+    console.warn(`[videosum] audio-only download failed: ${e.message}`);
+  }
   const result = await runSummaryPipeline({
     apiKey,
     inputPath,
+    audioInputPath: audioInputPath || undefined,
     outputDir,
     targetMinutes: targetMinutes ?? null,
     mode: mode || DEFAULT_SUMMARY_MODE,
@@ -708,7 +783,7 @@ async function startYouTubeJobPipeline({
   } catch (e) {
     setJob(jobId, {
       status: "failed",
-      error: e.message || "Processing failed.",
+      error: ytDlpBotHint(e.message),
       result: null,
     });
   } finally {

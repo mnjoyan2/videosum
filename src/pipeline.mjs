@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile, access } from "node:fs/promises";
+import { mkdir, readFile, writeFile, access, stat } from "node:fs/promises";
 import path from "node:path";
 import { constants } from "node:fs";
 import { spawn } from "node:child_process";
@@ -99,20 +99,54 @@ export async function ensureFfmpegExists() {
   await runCommand("ffmpeg", ["-version"], { quiet: true });
 }
 
+function mimeForAudioPath(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".wav") return "audio/wav";
+  return "audio/mpeg";
+}
+
+const FFMPEG_INPUT_ROBUST = [
+  "-fflags",
+  "+genpts+discardcorrupt",
+  "-err_detect",
+  "ignore_err",
+];
+
+const MIN_WAV_BYTES = 512_000;
+
 export async function extractAudio(inputPath, audioPath) {
-  await runCommand("ffmpeg", [
-    "-y",
-    "-i",
-    inputPath,
-    "-vn",
-    "-ac",
-    "1",
-    "-ar",
-    "16000",
-    "-c:a",
-    "mp3",
-    audioPath,
-  ]);
+  try {
+    await runCommand("ffmpeg", [
+      "-y",
+      ...FFMPEG_INPUT_ROBUST,
+      "-i",
+      inputPath,
+      "-vn",
+      "-map",
+      "0:a:0?",
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      "-c:a",
+      "pcm_s16le",
+      audioPath,
+    ]);
+  } catch (err) {
+    try {
+      const s = await stat(audioPath);
+      if (s.size >= MIN_WAV_BYTES) {
+        console.warn(
+          "[videosum] ffmpeg exited with errors but WAV output looks usable; continuing.",
+        );
+        return audioPath;
+      }
+    } catch {
+      throw err;
+    }
+    throw err;
+  }
+  return audioPath;
 }
 
 function buildMultipart(fields) {
@@ -147,6 +181,7 @@ function buildMultipart(fields) {
 
 export async function transcribeAudio({ apiKey, audioPath, model }) {
   const audioBuffer = await readFile(audioPath);
+  const fileMime = mimeForAudioPath(audioPath);
   const { body, contentType } = buildMultipart([
     { name: "model", value: model },
     { name: "response_format", value: "verbose_json" },
@@ -154,7 +189,7 @@ export async function transcribeAudio({ apiKey, audioPath, model }) {
     {
       name: "file",
       filename: path.basename(audioPath),
-      contentType: "audio/mpeg",
+      contentType: fileMime,
       value: audioBuffer,
     },
   ]);
@@ -450,6 +485,7 @@ export async function stitchVideo(inputPath, outputPath, clips) {
 
   await runCommand("ffmpeg", [
     "-y",
+    ...FFMPEG_INPUT_ROBUST,
     "-i",
     inputPath,
     "-filter_complex",
@@ -478,6 +514,7 @@ export async function writeJson(filePath, value) {
 export async function runSummaryPipeline({
   apiKey,
   inputPath,
+  audioInputPath,
   outputDir,
   targetMinutes = null,
   mode = DEFAULT_SUMMARY_MODE,
@@ -491,19 +528,23 @@ export async function runSummaryPipeline({
       ? Number(targetMinutes)
       : modeConfig.defaultMinutes;
   await ensureFileExists(inputPath);
+  const extractSource = audioInputPath || inputPath;
+  if (audioInputPath) {
+    await ensureFileExists(audioInputPath);
+  }
   await ensureFfmpegExists();
 
   const tempDir = path.join(outputDir, "tmp");
   await mkdir(tempDir, { recursive: true });
 
-  const audioPath = path.join(tempDir, "audio.mp3");
+  const audioPath = path.join(tempDir, "audio.wav");
   const transcriptPath = path.join(outputDir, "transcript.json");
   const summaryPath = path.join(outputDir, "summary.json");
   const summaryTextPath = path.join(outputDir, "summary.txt");
   const videoPath = path.join(outputDir, "summary-video.mp4");
 
   console.log("1/4 Extracting audio.---..");
-  await extractAudio(inputPath, audioPath);
+  await extractAudio(extractSource, audioPath);
 
   console.log("2/4 Transcribing with Whisper...");
   const transcript = await transcribeAudio({
