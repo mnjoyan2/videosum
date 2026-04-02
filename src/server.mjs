@@ -2,7 +2,9 @@ import "dotenv/config";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
+import { writeFileSync, existsSync } from "node:fs";
 import { mkdir, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
@@ -159,18 +161,73 @@ function parseAllowedVideoUrl(urlString) {
   return null;
 }
 
+let ytDlpCookiesCachedPath = null;
+
 function getYtDlpCookieArgs() {
   const out = [];
+  const cookiesB64 = String(process.env.YTDLP_COOKIES_TEXT_B64 || "").trim();
+  const cookiesText = String(process.env.YTDLP_COOKIES_TEXT || "");
   const cookiesFile = String(process.env.YTDLP_COOKIES || "").trim();
   const cookiesBrowser = String(
     process.env.YTDLP_COOKIES_FROM_BROWSER || "",
   ).trim();
-  if (cookiesFile) {
-    out.push("--cookies", cookiesFile);
+  let filePath = "";
+  if (cookiesB64) {
+    if (!ytDlpCookiesCachedPath) {
+      try {
+        const decoded = Buffer.from(cookiesB64, "base64").toString("utf8");
+        ytDlpCookiesCachedPath = path.join(
+          tmpdir(),
+          "videosum-youtube-cookies.txt",
+        );
+        writeFileSync(ytDlpCookiesCachedPath, decoded, "utf8");
+      } catch {
+        ytDlpCookiesCachedPath = null;
+      }
+    }
+    if (ytDlpCookiesCachedPath) {
+      filePath = ytDlpCookiesCachedPath;
+    }
+  } else if (cookiesText.trim()) {
+    if (!ytDlpCookiesCachedPath) {
+      ytDlpCookiesCachedPath = path.join(
+        tmpdir(),
+        "videosum-youtube-cookies.txt",
+      );
+      writeFileSync(ytDlpCookiesCachedPath, cookiesText, "utf8");
+    }
+    filePath = ytDlpCookiesCachedPath;
+  } else if (cookiesFile && existsSync(cookiesFile)) {
+    filePath = cookiesFile;
+  }
+  if (filePath) {
+    out.push("--cookies", filePath);
   } else if (cookiesBrowser) {
     out.push("--cookies-from-browser", cookiesBrowser);
   }
   return out;
+}
+
+function logYtDlpCookieStatus() {
+  const hasFile = String(process.env.YTDLP_COOKIES || "").trim();
+  const args = getYtDlpCookieArgs();
+  if (args.length === 0) {
+    if (hasFile && !existsSync(hasFile)) {
+      console.warn(
+        `[videosum] yt-dlp: YTDLP_COOKIES file not found: ${hasFile}`,
+      );
+    } else {
+      console.warn(
+        "[videosum] yt-dlp: no cookies configured — YouTube often returns “Sign in to confirm you’re not a bot”. Set YTDLP_COOKIES_TEXT_B64, YTDLP_COOKIES_TEXT, YTDLP_COOKIES, or YTDLP_COOKIES_FROM_BROWSER.",
+      );
+    }
+    return;
+  }
+  if (args[0] === "--cookies") {
+    console.log("[videosum] yt-dlp: --cookies enabled");
+  } else {
+    console.log("[videosum] yt-dlp: --cookies-from-browser enabled");
+  }
 }
 
 async function runYtDlp(url, outDir) {
@@ -635,6 +692,14 @@ app.get("/api/summary-modes", (_req, res) => {
   res.json({ modes, defaultMode: DEFAULT_SUMMARY_MODE });
 });
 
+app.get("/api/health", (_req, res) => {
+  const args = getYtDlpCookieArgs();
+  res.json({
+    ok: true,
+    ytDlpCookiesConfigured: args.length > 0,
+  });
+});
+
 function jsonBody(req, res, next) {
   express.json()(req, res, next);
 }
@@ -827,6 +892,7 @@ process.on("unhandledRejection", (reason) => {
 
 const PORT = Number(process.env.PORT || 3847);
 const server = app.listen(PORT, () => {
+  logYtDlpCookieStatus();
   console.log(`http://localhost:${PORT}`);
 });
 
