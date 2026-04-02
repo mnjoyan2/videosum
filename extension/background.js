@@ -4,6 +4,7 @@ const defaultState = () => ({
   baseUrl: "https://videosum-production-4f3c.up.railway.app",
   targetMinutes: "",
   apiKey: "",
+  transcriptSource: "captions",
   queue: [],
 });
 
@@ -63,7 +64,14 @@ async function tickPoll() {
       }
       if (data.status === "done") {
         item.state = "done";
-        item.videoUrl = data.videoUrl || `/api/jobs/${item.serverJobId}/summary-video.mp4`;
+        const fromApi = data.videoUrl && String(data.videoUrl).trim();
+        if (fromApi) {
+          item.videoUrl = data.videoUrl;
+        } else if (item.transcriptSource === "whisper") {
+          item.videoUrl = `/api/jobs/${item.serverJobId}/summary-video.mp4`;
+        } else {
+          item.videoUrl = null;
+        }
         changed = true;
       } else if (data.status === "failed") {
         item.state = "failed";
@@ -108,6 +116,7 @@ async function submitQueued() {
             url: item.url,
             targetMinutes: state.targetMinutes !== "" ? state.targetMinutes : undefined,
             mode: item.mode || "key_moments",
+            transcriptSource: item.transcriptSource || state.transcriptSource || "captions",
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -129,7 +138,7 @@ async function submitQueued() {
   return { started: todo.length };
 }
 
-async function addToQueue({ url, title, mode }) {
+async function addToQueue({ url, title, mode, transcriptSource: transcriptSourceArg }) {
   const state = await loadState();
   const canonical = String(url).trim();
   if (!canonical) {
@@ -142,7 +151,15 @@ async function addToQueue({ url, title, mode }) {
         "Please add your OpenAI API key in the Videosum extension popup (click the puzzle icon, then Videosum).",
     };
   }
-  if (state.queue.some((q) => q.url === canonical)) {
+  const ts = String(transcriptSourceArg ?? state.transcriptSource ?? "captions");
+  const transcriptSource = ts === "whisper" ? "whisper" : "captions";
+  if (
+    state.queue.some(
+      (q) =>
+        q.url === canonical &&
+        (q.transcriptSource || "captions") === transcriptSource,
+    )
+  ) {
     return { ok: true, duplicate: true };
   }
   const id = crypto.randomUUID();
@@ -151,6 +168,7 @@ async function addToQueue({ url, title, mode }) {
     url: canonical,
     title: String(title || "Video").slice(0, 500),
     mode: mode || "key_moments",
+    transcriptSource,
     state: "queued",
     serverJobId: null,
     error: null,
@@ -221,6 +239,10 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       if (msg.targetMinutes != null) {
         const raw = String(msg.targetMinutes).trim();
         state.targetMinutes = raw === "" ? "" : (Number.isFinite(Number(raw)) && Number(raw) > 0 ? Number(raw) : state.targetMinutes);
+      }
+      if (msg.transcriptSource != null) {
+        const t = String(msg.transcriptSource).trim().toLowerCase();
+        state.transcriptSource = t === "whisper" ? "whisper" : "captions";
       }
       await saveState(state);
       sendResponse({ ok: true });

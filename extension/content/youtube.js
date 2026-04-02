@@ -1,4 +1,5 @@
 const MARK_WATCH = "data-videosum-watch";
+const MARK_TRIGGER = "data-videosum-trigger";
 const NS = "http://www.w3.org/2000/svg";
 
 const MODES = [
@@ -139,12 +140,6 @@ function showToast(text, kind) {
   }, 4200);
 }
 
-function openVideosumPopup() {
-  chrome.runtime.sendMessage({ type: "OPEN_VIDEOSUM_UI" }, () => {
-    void chrome.runtime.lastError;
-  });
-}
-
 function getVideoIdFromHref(href) {
   try {
     const u = new URL(href, location.origin);
@@ -194,9 +189,17 @@ function tileVideoId(tile) {
   return a?.href ? getVideoIdFromHref(a.href) : null;
 }
 
-function sendEnqueue(url, title, mode) {
+function sendEnqueue(url, title, mode, transcriptSource) {
   chrome.runtime.sendMessage(
-    { type: "ADD_TO_QUEUE", payload: { url, title, mode } },
+    {
+      type: "ADD_TO_QUEUE",
+      payload: {
+        url,
+        title,
+        mode,
+        transcriptSource: transcriptSource || "captions",
+      },
+    },
     (response) => {
       if (chrome.runtime.lastError) {
         showToast("Could not reach the extension. Try reloading the page.", "error");
@@ -214,8 +217,6 @@ function sendEnqueue(url, title, mode) {
     },
   );
 }
-
-// ─── MODE PICKER POPOVER ──────────────────────────────────────────────────────
 
 const popover = (() => {
   const el = document.createElement("div");
@@ -238,7 +239,7 @@ const popover = (() => {
 
 let popoverPendingUrl = null;
 let popoverPendingTitle = null;
-let popoverCloseTimer = null;
+let popoverPendingVideoId = null;
 
 function buildPopover() {
   popover.innerHTML = "";
@@ -291,19 +292,30 @@ function buildPopover() {
       e.stopPropagation();
       const url = popoverPendingUrl;
       const title = popoverPendingTitle;
+      const vid = popoverPendingVideoId;
       hidePopover();
-      if (url) {
-        sendEnqueue(url, title || "Video", mode.id);
-      }
+      if (!url || !vid) return;
+      chrome.storage.local.get("videosumState", (raw) => {
+        const st = raw.videosumState || {};
+        const ts = st.transcriptSource === "whisper" ? "whisper" : "captions";
+        sendEnqueue(url, title || "Video", mode.id, ts);
+        if (typeof window.showVideosumSidebar === "function") {
+          window.showVideosumSidebar({
+            videoId: vid,
+            watchUrl: url,
+            title: title || "Video",
+          });
+        }
+      });
     });
     popover.appendChild(row);
   }
 }
 
-function showPopover(anchorEl, url, title) {
-  clearTimeout(popoverCloseTimer);
+function showPopover(anchorEl, url, title, videoId) {
   popoverPendingUrl = url;
   popoverPendingTitle = title;
+  popoverPendingVideoId = videoId;
   buildPopover();
 
   const rect = anchorEl.getBoundingClientRect();
@@ -330,12 +342,14 @@ function hidePopover() {
   popover.style.display = "none";
   popoverPendingUrl = null;
   popoverPendingTitle = null;
+  popoverPendingVideoId = null;
 }
 
 document.addEventListener("click", (e) => {
-  if (!popover.contains(e.target)) {
-    hidePopover();
-  }
+  if (popover.style.display === "none") return;
+  if (popover.contains(e.target)) return;
+  if (e.target.closest(`[${MARK_TRIGGER}]`)) return;
+  hidePopover();
 }, true);
 
 document.addEventListener("keydown", (e) => {
@@ -358,6 +372,7 @@ function injectWatchButton() {
 
   const wrap = document.createElement("span");
   wrap.setAttribute(MARK_WATCH, "1");
+  wrap.setAttribute(MARK_TRIGGER, "1");
   wrap.style.cssText =
     "display:inline-flex;align-items:center;align-self:center;" +
     "margin-inline-start:8px;vertical-align:middle;flex-shrink:0;position:relative;";
@@ -391,12 +406,11 @@ function injectWatchButton() {
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
-    openVideosumPopup();
     if (popover.style.display !== "none") {
       hidePopover();
       return;
     }
-    showPopover(btn, canonicalWatchUrl(id), watchTitle());
+    showPopover(btn, canonicalWatchUrl(id), watchTitle(), id);
   });
 
   wrap.appendChild(btn);
@@ -428,6 +442,7 @@ const floatingBtn = (() => {
     "transition:background 0.15s,transform 0.1s",
   ].join(";");
   btn.appendChild(makeSvgIcon(18, "#fff"));
+  btn.setAttribute(MARK_TRIGGER, "1");
   document.body.appendChild(btn);
   return btn;
 })();
@@ -450,6 +465,8 @@ function showFloatingBtn(tile, vid) {
 function scheduleHide() {
   hideTimer = setTimeout(() => {
     if (popover.style.display !== "none") return;
+    const side = document.querySelector("[data-videosum-sidebar]");
+    if (side && side.classList.contains("vsm-open")) return;
     floatingBtn.style.display = "none";
     currentVid = null;
     currentTile = null;
@@ -462,12 +479,16 @@ floatingBtn.addEventListener("click", (e) => {
   e.preventDefault();
   e.stopPropagation();
   if (!currentVid || !currentTile) return;
-  openVideosumPopup();
   if (popover.style.display !== "none") {
     hidePopover();
     return;
   }
-  showPopover(floatingBtn, canonicalWatchUrl(currentVid), tileTitle(currentTile));
+  showPopover(
+    floatingBtn,
+    canonicalWatchUrl(currentVid),
+    tileTitle(currentTile),
+    currentVid,
+  );
 });
 
 window.addEventListener("scroll", () => {
@@ -485,6 +506,8 @@ function attachTileListeners(tile, vid) {
   tile.addEventListener("mouseleave", (e) => {
     if (e.relatedTarget === floatingBtn || floatingBtn.contains(e.relatedTarget)) return;
     if (popover.style.display !== "none") return;
+    const side = document.querySelector("[data-videosum-sidebar]");
+    if (side && side.classList.contains("vsm-open")) return;
     scheduleHide();
   });
 }
@@ -518,12 +541,22 @@ function boot() {
   observer.observe(document.documentElement, { childList: true, subtree: true });
   document.addEventListener("yt-navigate-finish", () => {
     hidePopover();
+    const side = document.querySelector("[data-videosum-sidebar]");
+    if (side) side.classList.remove("vsm-open");
     floatingBtn.style.display = "none";
     currentVid = null;
     currentTile = null;
     scheduleScan();
   });
 }
+
+window.__videosum = {
+  MODES,
+  makeModeIcon,
+  makeSvgIcon,
+  sendEnqueue,
+  showToast,
+};
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", boot);

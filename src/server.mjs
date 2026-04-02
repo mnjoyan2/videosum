@@ -30,6 +30,14 @@ function normalizeSummaryMode(raw) {
     : DEFAULT_SUMMARY_MODE;
 }
 
+function normalizeTranscriptSource(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  if (s === "whisper") {
+    return "whisper";
+  }
+  return "captions";
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const jobsRoot = path.join(root, "output", "jobs");
@@ -574,6 +582,33 @@ async function findDownloadedInputFile(outDir) {
   return path.join(outDir, name);
 }
 
+async function runYouTubeWhisperPipeline({
+  jobId,
+  apiKey,
+  parsed,
+  targetMinutes,
+  mode,
+}) {
+  const outputDir = path.join(jobsRoot, jobId);
+  await mkdir(outputDir, { recursive: true });
+  await runYtDlp(parsed.canonical, outputDir);
+  const inputPath = await findDownloadedInputFile(outputDir);
+  const result = await runSummaryPipeline({
+    apiKey,
+    inputPath,
+    outputDir,
+    targetMinutes: targetMinutes ?? null,
+    mode: mode || DEFAULT_SUMMARY_MODE,
+    stitch: true,
+  });
+  return {
+    ...result,
+    sourceType: "youtube",
+    youtubeVideoId: parsed.videoId,
+    youtubeWatchUrl: parsed.canonical,
+  };
+}
+
 async function startJobPipeline({
   jobId,
   inputPath,
@@ -629,6 +664,7 @@ async function startYouTubeJobPipeline({
   targetMinutes,
   mode,
   apiKey,
+  transcriptSource = "captions",
 }) {
   const resolvedKey = apiKey || process.env.OPENAI_API_KEY;
   if (!resolvedKey) {
@@ -639,18 +675,31 @@ async function startYouTubeJobPipeline({
     });
     return;
   }
+  const source = normalizeTranscriptSource(transcriptSource);
   await acquireSlot();
   setJob(jobId, { status: "running" });
+  const modeLabel = mode || DEFAULT_SUMMARY_MODE;
   console.log(
-    `[videosum] job ${jobId} instant youtube summary starting (mode: ${mode || DEFAULT_SUMMARY_MODE})`,
+    `[videosum] job ${jobId} youtube summary (${source}, mode: ${modeLabel})`,
   );
   try {
-    const result = await runYouTubeSummaryPipeline({
-      apiKey: resolvedKey,
-      parsed,
-      targetMinutes: targetMinutes ?? null,
-      mode: mode || DEFAULT_SUMMARY_MODE,
-    });
+    let result;
+    if (source === "whisper") {
+      result = await runYouTubeWhisperPipeline({
+        jobId,
+        apiKey: resolvedKey,
+        parsed,
+        targetMinutes: targetMinutes ?? null,
+        mode: modeLabel,
+      });
+    } else {
+      result = await runYouTubeSummaryPipeline({
+        apiKey: resolvedKey,
+        parsed,
+        targetMinutes: targetMinutes ?? null,
+        mode: modeLabel,
+      });
+    }
     setJob(jobId, {
       status: "done",
       result: buildSuccessPayload(jobId, result),
@@ -728,6 +777,9 @@ app.post(
           ? Number(rawTarget)
           : null;
       const mode = normalizeSummaryMode(req.body?.mode);
+      const transcriptSource = normalizeTranscriptSource(
+        req.body?.transcriptSource,
+      );
 
       if (req.file) {
         const jobId = req.jobId;
@@ -772,6 +824,7 @@ app.post(
         targetMinutes,
         mode,
         apiKey,
+        transcriptSource,
       });
 
       res.status(201).json({ jobId });

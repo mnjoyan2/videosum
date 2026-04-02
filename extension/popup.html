@@ -431,6 +431,23 @@
         <p class="field-hint" style="padding:0 12px 12px">Stored locally in your browser. Never sent anywhere except your configured server URL. Get one at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--accent)">platform.openai.com</a>.</p>
       </section>
 
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Transcript source</span>
+        </div>
+        <div class="field-row" style="padding:12px 12px 4px;flex-direction:column;align-items:stretch;gap:10px">
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;line-height:1.35">
+            <input type="radio" name="ts" id="tsCaptions" value="captions" checked style="margin-top:2px" />
+            YouTube captions (default on YouTube)
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:13px;line-height:1.35">
+            <input type="radio" name="ts" id="tsWhisper" value="whisper" style="margin-top:2px" />
+            Whisper (download + transcribe; summary video when server finishes)
+          </label>
+        </div>
+        <p class="field-hint" style="padding:0 12px 12px">Used when you queue from the on-page sidebar.</p>
+      </section>
+
       <section class="panel panel-queue">
         <div class="panel-head">
           <span class="panel-title">Jobs</span>

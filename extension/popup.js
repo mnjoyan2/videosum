@@ -6,6 +6,8 @@ const clearDoneBtn = document.getElementById("clearDone");
 const listEl = document.getElementById("list");
 const emptyEl = document.getElementById("empty");
 const queueBadgeEl = document.getElementById("queueBadge");
+const tsCaptionsEl = document.getElementById("tsCaptions");
+const tsWhisperEl = document.getElementById("tsWhisper");
 
 const STATUS_LABEL = {
   queued: "Queued",
@@ -35,6 +37,14 @@ function render(state) {
   targetMinutesEl.value = tv !== "" && tv != null ? tv : "";
   if (apiKeyEl && !apiKeyEl.matches(":focus")) {
     apiKeyEl.value = state.apiKey || "";
+  }
+  const ts = state.transcriptSource === "whisper" ? "whisper" : "captions";
+  if (tsWhisperEl && tsCaptionsEl) {
+    if (ts === "whisper") {
+      tsWhisperEl.checked = true;
+    } else {
+      tsCaptionsEl.checked = true;
+    }
   }
 
   listEl.innerHTML = "";
@@ -73,6 +83,10 @@ function render(state) {
       badge.textContent = MODE_LABELS[item.mode] || item.mode;
       meta.appendChild(badge);
     }
+    const tsB = document.createElement("span");
+    tsB.className = "mode-badge";
+    tsB.textContent = item.transcriptSource === "whisper" ? "Whisper" : "Captions";
+    meta.appendChild(tsB);
     li.appendChild(meta);
 
     if (item.error) {
@@ -85,7 +99,7 @@ function render(state) {
     const actions = document.createElement("div");
     actions.className = "actions";
 
-    if (item.state === "done" && item.serverJobId) {
+    if (item.state === "done" && item.serverJobId && item.videoUrl) {
       const openBtn = document.createElement("button");
       openBtn.type = "button";
       openBtn.textContent = "Open video";
@@ -135,6 +149,21 @@ targetMinutesEl.addEventListener("change", () => {
     targetMinutes: raw === "" ? "" : raw,
   });
 });
+
+if (tsCaptionsEl) {
+  tsCaptionsEl.addEventListener("change", () => {
+    if (tsCaptionsEl.checked) {
+      chrome.runtime.sendMessage({ type: "SET_SETTINGS", transcriptSource: "captions" });
+    }
+  });
+}
+if (tsWhisperEl) {
+  tsWhisperEl.addEventListener("change", () => {
+    if (tsWhisperEl.checked) {
+      chrome.runtime.sendMessage({ type: "SET_SETTINGS", transcriptSource: "whisper" });
+    }
+  });
+}
 
 retryBtn.addEventListener("click", () => {
   retryBtn.disabled = true;
