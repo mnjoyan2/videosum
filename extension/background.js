@@ -30,13 +30,51 @@ async function saveState(state) {
   await chrome.storage.local.set({ [STORAGE_KEY]: state });
 }
 
+async function collectYoutubeCookiesNetscape() {
+  const seen = new Set();
+  const merged = [];
+  for (const url of [
+    "https://www.youtube.com",
+    "https://m.youtube.com",
+    "https://www.google.com",
+  ]) {
+    let part;
+    try {
+      part = await chrome.cookies.getAll({ url });
+    } catch {
+      part = [];
+    }
+    for (const c of part) {
+      const key = `${c.domain}|${c.name}|${c.path}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      merged.push(c);
+    }
+  }
+  if (merged.length === 0) {
+    return "";
+  }
+  const header =
+    "# Netscape HTTP Cookie File\n# https://curl.haxx.se/rfc/cookie_spec.html\n\n";
+  const lines = merged.map((c) => {
+    const domain = c.domain || "";
+    const includeSub = !c.hostOnly ? "TRUE" : "FALSE";
+    const pth = c.path || "/";
+    const secure = c.secure ? "TRUE" : "FALSE";
+    const exp = c.expirationDate ? Math.floor(c.expirationDate) : 0;
+    const val = String(c.value).replace(/\r?\n|\r/g, "");
+    return `${domain}\t${includeSub}\t${pth}\t${secure}\t${exp}\t${c.name}\t${val}`;
+  });
+  return header + lines.join("\n");
+}
+
 let pollTimer = null;
 let submitChain = Promise.resolve();
 
 function scheduleSubmitQueued() {
-  submitChain = submitChain
-    .catch(() => {})
-    .then(() => submitQueued());
+  submitChain = submitChain.catch(() => {}).then(() => submitQueued());
   return submitChain;
 }
 
@@ -106,6 +144,12 @@ async function submitQueued() {
   await Promise.all(
     todo.map(async (item) => {
       try {
+        let youtubeCookies = "";
+        try {
+          youtubeCookies = await collectYoutubeCookiesNetscape();
+        } catch {
+          youtubeCookies = "";
+        }
         const res = await fetch(`${baseUrl}/api/jobs`, {
           method: "POST",
           headers: {
@@ -114,9 +158,12 @@ async function submitQueued() {
           },
           body: JSON.stringify({
             url: item.url,
-            targetMinutes: state.targetMinutes !== "" ? state.targetMinutes : undefined,
+            targetMinutes:
+              state.targetMinutes !== "" ? state.targetMinutes : undefined,
             mode: item.mode || "key_moments",
-            transcriptSource: item.transcriptSource || state.transcriptSource || "captions",
+            transcriptSource:
+              item.transcriptSource || state.transcriptSource || "captions",
+            ...(youtubeCookies ? { youtubeCookies } : {}),
           }),
         });
         const data = await res.json().catch(() => ({}));
@@ -138,7 +185,12 @@ async function submitQueued() {
   return { started: todo.length };
 }
 
-async function addToQueue({ url, title, mode, transcriptSource: transcriptSourceArg }) {
+async function addToQueue({
+  url,
+  title,
+  mode,
+  transcriptSource: transcriptSourceArg,
+}) {
   const state = await loadState();
   const canonical = String(url).trim();
   if (!canonical) {
@@ -147,11 +199,12 @@ async function addToQueue({ url, title, mode, transcriptSource: transcriptSource
   if (!String(state.apiKey || "").trim()) {
     return {
       ok: false,
-      error:
-        "Please add your OpenAI API key in the Videosum extension popup (click the puzzle icon, then Videosum).",
+      error: "Please add your OpenAI API key in Videosum",
     };
   }
-  const ts = String(transcriptSourceArg ?? state.transcriptSource ?? "captions");
+  const ts = String(
+    transcriptSourceArg ?? state.transcriptSource ?? "captions",
+  );
   const transcriptSource = ts === "whisper" ? "whisper" : "captions";
   if (
     state.queue.some(
@@ -192,19 +245,26 @@ async function startAll() {
 
 async function openVideosumUi() {
   try {
-    await chrome.action.openPopup();
-  } catch {
-    try {
-      await chrome.windows.create({
-        url: chrome.runtime.getURL("popup.html"),
-        type: "popup",
-        width: 420,
-        height: 620,
-        focused: true,
-      });
-    } catch (_) {}
-  }
+    await chrome.windows.create({
+      url: chrome.runtime.getURL("popup.html"),
+      type: "popup",
+      width: 420,
+      height: 620,
+      focused: true,
+    });
+  } catch (_) {}
 }
+
+chrome.action.onClicked.addListener((tab) => {
+  const u = tab?.url || "";
+  if (/^https:\/\/(www\.|m\.)?youtube\.com\//.test(u)) {
+    chrome.tabs.sendMessage(tab.id, { type: "VIDEOSUM_OPEN_SIDEBAR" }, () => {
+      void chrome.runtime.lastError;
+    });
+    return;
+  }
+  void openVideosumUi();
+});
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "OPEN_VIDEOSUM_UI") {
@@ -238,7 +298,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       }
       if (msg.targetMinutes != null) {
         const raw = String(msg.targetMinutes).trim();
-        state.targetMinutes = raw === "" ? "" : (Number.isFinite(Number(raw)) && Number(raw) > 0 ? Number(raw) : state.targetMinutes);
+        state.targetMinutes =
+          raw === ""
+            ? ""
+            : Number.isFinite(Number(raw)) && Number(raw) > 0
+              ? Number(raw)
+              : state.targetMinutes;
       }
       if (msg.transcriptSource != null) {
         const t = String(msg.transcriptSource).trim().toLowerCase();

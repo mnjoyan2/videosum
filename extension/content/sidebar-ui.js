@@ -3,7 +3,7 @@
   const ROOT_ID = "videosum-sidebar-root";
 
   const STATUS_LABEL = {
-    queued: "Queued",
+    queued: "Waiting",
     processing: "Processing",
     done: "Done",
     failed: "Failed",
@@ -19,7 +19,8 @@
   };
 
   let root = null;
-  let iframeEl = null;
+  let playerPanelEl = null;
+  let summaryVideoEl = null;
   let queueBadgeEl = null;
   let listEl = null;
   let emptyEl = null;
@@ -110,12 +111,14 @@
   overflow: hidden;
   margin-bottom: 10px;
 }
-.vsm-player-wrap iframe {
+.vsm-player-wrap video {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   border: 0;
+  object-fit: contain;
+  background: #000;
 }
 .vsm-field label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 6px; }
 .vsm-hint { font-size: 11px; color: #8b95a8; margin-top: 6px; line-height: 1.35; }
@@ -206,13 +209,13 @@
       <div class="vsm-sub">AI summaries from YouTube</div>
     </div>
   </div>
-  <span class="vsm-badge" id="vsm-queue-badge">0 jobs</span>
+  <span class="vsm-badge" id="vsm-queue-badge">0 summaries</span>
   <button type="button" class="vsm-close" id="vsm-close" aria-label="Close">×</button>
 </div>
 <div class="vsm-scroll">
-  <div class="vsm-panel">
-    <div class="vsm-pt">Player</div>
-    <div class="vsm-player-wrap"><iframe id="vsm-iframe" title="YouTube" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>
+  <div class="vsm-panel" id="vsm-player-panel" style="display:none">
+    <div class="vsm-pt">Summary video</div>
+    <div class="vsm-player-wrap"><video id="vsm-summary-video" controls playsinline></video></div>
   </div>
   <div class="vsm-panel">
     <div class="vsm-pt">Output length</div>
@@ -222,7 +225,7 @@
     </div>
     <p class="vsm-hint">Leave empty for per-style defaults, or set a cap for all jobs.</p>
     <div class="vsm-row">
-      <button type="button" class="vsm-btn vsm-btn-primary" id="vsm-retry">Retry failed / queued</button>
+      <button type="button" class="vsm-btn vsm-btn-primary" id="vsm-retry">Resume summaries</button>
       <button type="button" class="vsm-btn vsm-btn-ghost" id="vsm-clear">Clear completed</button>
     </div>
   </div>
@@ -239,7 +242,7 @@
       <label for="vsm-api">Your API key</label>
       <input type="password" id="vsm-api" class="vsm-input" placeholder="sk-..." autocomplete="off" spellcheck="false" />
     </div>
-    <p class="vsm-hint">Stored locally. Sent only to your configured server.</p>
+    <p class="vsm-hint">Stored locally. Sent only to your configured server. <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" style="color:#4da3ff">Get an API key</a></p>
   </div>
   <div class="vsm-panel">
     <div class="vsm-pt">Summarization style</div>
@@ -248,7 +251,7 @@
   <div class="vsm-panel">
     <div class="vsm-pt">Jobs</div>
     <ul class="vsm-ul" id="vsm-list"></ul>
-    <div class="vsm-empty" id="vsm-empty">Nothing queued yet. Pick a style below.</div>
+    <div class="vsm-empty" id="vsm-empty">No summaries yet. Pick a style below.</div>
   </div>
 </div>
 <div class="vsm-foot">
@@ -264,7 +267,8 @@
 </div>`;
     document.body.appendChild(root);
 
-    iframeEl = root.querySelector("#vsm-iframe");
+    playerPanelEl = root.querySelector("#vsm-player-panel");
+    summaryVideoEl = root.querySelector("#vsm-summary-video");
     queueBadgeEl = root.querySelector("#vsm-queue-badge");
     listEl = root.querySelector("#vsm-list");
     emptyEl = root.querySelector("#vsm-empty");
@@ -326,6 +330,36 @@
     });
   }
 
+  function normalizeBaseUrl(url) {
+    const u = String(url || "").trim();
+    if (!u) return "https://videosum-production-4f3c.up.railway.app";
+    return u.replace(/\/+$/, "");
+  }
+
+  function summaryVideoSrc(state, item) {
+    if (!item?.videoUrl) return "";
+    const raw = String(item.videoUrl).trim();
+    if (raw.startsWith("http")) return raw;
+    const base = normalizeBaseUrl(state.baseUrl);
+    return `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  }
+
+  function updatePlayerPanel(state) {
+    if (!playerPanelEl || !summaryVideoEl) return;
+    const q = state.queue || [];
+    const pick = [...q].reverse().find((x) => x.state === "done" && x.videoUrl);
+    if (!pick) {
+      playerPanelEl.style.display = "none";
+      summaryVideoEl.removeAttribute("src");
+      return;
+    }
+    playerPanelEl.style.display = "";
+    const src = summaryVideoSrc(state, pick);
+    if (summaryVideoEl.getAttribute("src") !== src) {
+      summaryVideoEl.src = src;
+    }
+  }
+
   function buildModes() {
     const vs = window.__videosum;
     if (!vs || !modesWrap) return;
@@ -380,7 +414,7 @@
     listEl.innerHTML = "";
     emptyEl.style.display = q.length ? "none" : "block";
     const n = q.length;
-    queueBadgeEl.textContent = n === 1 ? "1 job" : `${n} jobs`;
+    queueBadgeEl.textContent = n === 1 ? "1 summary" : `${n} summaries`;
     queueBadgeEl.classList.toggle("on", n > 0);
 
     for (const item of q) {
@@ -411,6 +445,7 @@
       li.appendChild(rm);
       listEl.appendChild(li);
     }
+    updatePlayerPanel(state);
   }
 
   function refresh() {
@@ -427,12 +462,8 @@
       buildShell();
       buildModes();
     }
-    const videoId = opts && opts.videoId;
     const watchUrl = (opts && opts.watchUrl) || "";
     const title = (opts && opts.title) || "YouTube video";
-    if (videoId && iframeEl) {
-      iframeEl.src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?rel=0`;
-    }
     setModeButtonUrls(watchUrl, title);
     root.classList.add("vsm-open");
     refresh();

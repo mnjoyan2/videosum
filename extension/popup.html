@@ -396,7 +396,7 @@
             <p>AI summaries from YouTube</p>
           </div>
         </div>
-        <span class="queue-badge" id="queueBadge">0 in queue</span>
+        <span class="queue-badge" id="queueBadge">0 summaries</span>
       </div>
     </header>
 
@@ -413,7 +413,7 @@
         </div>
         <p class="field-hint">Leave empty so each summarization style uses a sensible default length. Set a number to cap all jobs.</p>
         <div class="btn-row">
-          <button type="button" class="primary" id="retryBtn">Retry failed / queued</button>
+          <button type="button" class="primary" id="retryBtn">Resume summaries</button>
           <button type="button" class="ghost" id="clearDone">Clear completed</button>
         </div>
       </section>
@@ -445,7 +445,7 @@
             Whisper (download + transcribe; summary video when server finishes)
           </label>
         </div>
-        <p class="field-hint" style="padding:0 12px 12px">Used when you queue from the on-page sidebar.</p>
+        <p class="field-hint" style="padding:0 12px 12px">Used when you add videos from the on-page sidebar.</p>
       </section>
 
       <section class="panel panel-queue">
@@ -456,8 +456,8 @@
           <ul id="list"></ul>
           <div class="empty" id="empty">
             <div class="empty-icon">▶</div>
-            <div class="empty-title">Nothing queued yet</div>
-            <p>On YouTube, hover a video and tap the summarize control, then pick a style (key moments, trailer, etc.). Jobs show up here.</p>
+            <div class="empty-title">No summaries yet</div>
+            <p>On YouTube, hover a video and tap Summarize, then pick a style (key moments, trailer, etc.). Active work appears here.</p>
           </div>
         </div>
       </section>

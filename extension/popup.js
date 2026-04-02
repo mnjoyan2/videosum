@@ -10,7 +10,7 @@ const tsCaptionsEl = document.getElementById("tsCaptions");
 const tsWhisperEl = document.getElementById("tsWhisper");
 
 const STATUS_LABEL = {
-  queued: "Queued",
+  queued: "Waiting",
   processing: "Processing",
   done: "Done",
   failed: "Failed",
@@ -52,7 +52,7 @@ function render(state) {
   emptyEl.style.display = q.length ? "none" : "block";
   if (queueBadgeEl) {
     const n = q.length;
-    queueBadgeEl.textContent = n === 1 ? "1 job" : `${n} jobs`;
+    queueBadgeEl.textContent = n === 1 ? "1 summary" : `${n} summaries`;
     queueBadgeEl.classList.toggle("has-items", n > 0);
   }
 

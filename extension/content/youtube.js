@@ -205,11 +205,11 @@ function sendEnqueue(url, title, mode, transcriptSource) {
         showToast("Could not reach the extension. Try reloading the page.", "error");
         return;
       }
-      if (response?.ok) {
+        if (response?.ok) {
         if (response.duplicate) {
-          showToast("This video is already in your queue.", "success");
+          showToast("This video is already being summarized.", "success");
         } else {
-          showToast("Video added to your queue. Summarization will start shortly.", "success");
+          showToast("Added. Summarization will start shortly.", "success");
         }
       } else {
         showToast(response?.error || "Something went wrong.", "error");
@@ -557,6 +557,29 @@ window.__videosum = {
   sendEnqueue,
   showToast,
 };
+
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg?.type === "VIDEOSUM_OPEN_SIDEBAR") {
+    const id = watchPageVideoId();
+    if (typeof window.showVideosumSidebar === "function") {
+      if (id) {
+        window.showVideosumSidebar({
+          videoId: id,
+          watchUrl: canonicalWatchUrl(id),
+          title: watchTitle(),
+        });
+      } else {
+        window.showVideosumSidebar({
+          watchUrl: "",
+          title: "YouTube",
+        });
+      }
+    }
+    sendResponse({ ok: true });
+    return true;
+  }
+  return undefined;
+});
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", boot);

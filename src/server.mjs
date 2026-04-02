@@ -2,7 +2,7 @@ import "dotenv/config";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
-import { writeFileSync, existsSync } from "node:fs";
+import { writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { mkdir, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -171,7 +171,7 @@ function parseAllowedVideoUrl(urlString) {
 
 let ytDlpCookiesCachedPath = null;
 
-function getYtDlpCookieArgs() {
+function getYtDlpCookieArgsFromEnv() {
   const out = [];
   const cookiesB64 = String(process.env.YTDLP_COOKIES_TEXT_B64 || "").trim();
   const cookiesText = String(process.env.YTDLP_COOKIES_TEXT || "");
@@ -216,6 +216,14 @@ function getYtDlpCookieArgs() {
   return out;
 }
 
+function getYtDlpCookieArgs(overridePath) {
+  const p = String(overridePath || "").trim();
+  if (p && existsSync(p)) {
+    return ["--cookies", p];
+  }
+  return getYtDlpCookieArgsFromEnv();
+}
+
 function ytDlpBotHint(message) {
   const m = String(message || "").trim();
   if (!m) {
@@ -224,20 +232,16 @@ function ytDlpBotHint(message) {
   if (!/sign in to confirm|not a bot/i.test(m)) {
     return m;
   }
-  return `${m}\n\nServer: set YTDLP_COOKIES (Netscape cookies file path), YTDLP_COOKIES_TEXT or YTDLP_COOKIES_TEXT_B64 (file contents), or YTDLP_COOKIES_FROM_BROWSER (e.g. chrome). See https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies`;
+  return `${m}\n\nUse the Videosum extension while signed into YouTube (it sends cookies to your server), or set YTDLP_COOKIES, YTDLP_COOKIES_TEXT, YTDLP_COOKIES_TEXT_B64, or YTDLP_COOKIES_FROM_BROWSER on the server. See https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies`;
 }
 
 function logYtDlpCookieStatus() {
   const hasFile = String(process.env.YTDLP_COOKIES || "").trim();
-  const args = getYtDlpCookieArgs();
+  const args = getYtDlpCookieArgsFromEnv();
   if (args.length === 0) {
     if (hasFile && !existsSync(hasFile)) {
       console.warn(
         `[videosum] yt-dlp: YTDLP_COOKIES file not found: ${hasFile}`,
-      );
-    } else {
-      console.warn(
-        "[videosum] yt-dlp: no cookies configured — YouTube often returns “Sign in to confirm you’re not a bot”. Set YTDLP_COOKIES_TEXT_B64, YTDLP_COOKIES_TEXT, YTDLP_COOKIES, or YTDLP_COOKIES_FROM_BROWSER.",
       );
     }
     return;
@@ -249,7 +253,7 @@ function logYtDlpCookieStatus() {
   }
 }
 
-async function runYtDlp(url, outDir) {
+async function runYtDlp(url, outDir, cookiePath) {
   await mkdir(outDir, { recursive: true });
   const template = path.join(outDir, "input.%(ext)s");
   console.log(`[videosum] yt-dlp downloading…`);
@@ -257,7 +261,7 @@ async function runYtDlp(url, outDir) {
     const child = spawn(
       "yt-dlp",
       [
-        ...getYtDlpCookieArgs(),
+        ...getYtDlpCookieArgs(cookiePath),
         "-f",
         "bv*+ba[ext=webm]/bv*+ba/bestvideo+bestaudio/best",
         "-o",
@@ -292,7 +296,7 @@ async function runYtDlp(url, outDir) {
   });
 }
 
-async function runYtDlpBestAudio(url, outDir) {
+async function runYtDlpBestAudio(url, outDir, cookiePath) {
   await mkdir(outDir, { recursive: true });
   const template = path.join(outDir, "audio-only.%(ext)s");
   console.log(`[videosum] yt-dlp downloading audio-only…`);
@@ -300,7 +304,7 @@ async function runYtDlpBestAudio(url, outDir) {
     const child = spawn(
       "yt-dlp",
       [
-        ...getYtDlpCookieArgs(),
+        ...getYtDlpCookieArgs(cookiePath),
         "-f",
         "ba[ext=webm]/ba[acodec=opus]/ba/bestaudio",
         "-o",
@@ -335,12 +339,12 @@ async function runYtDlpBestAudio(url, outDir) {
   });
 }
 
-async function runYtDlpJson(url) {
+async function runYtDlpJson(url, cookiePath) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "yt-dlp",
       [
-        ...getYtDlpCookieArgs(),
+        ...getYtDlpCookieArgs(cookiePath),
         "--dump-single-json",
         "--skip-download",
         "--no-warnings",
@@ -528,8 +532,8 @@ function parseWebVttTranscript(raw) {
   return segments;
 }
 
-async function fetchYouTubeTranscript(parsed) {
-  const info = await runYtDlpJson(parsed.canonical);
+async function fetchYouTubeTranscript(parsed, cookiePath) {
+  const info = await runYtDlpJson(parsed.canonical, cookiePath);
   const track = pickCaptionTrack(info);
   if (!track) {
     throw new Error(
@@ -582,8 +586,9 @@ async function runYouTubeSummaryPipeline({
   parsed,
   targetMinutes,
   mode,
+  cookiePath,
 }) {
-  const transcriptBundle = await fetchYouTubeTranscript(parsed);
+  const transcriptBundle = await fetchYouTubeTranscript(parsed, cookiePath);
   const modeConfig = SUMMARY_MODES[mode] || SUMMARY_MODES[DEFAULT_SUMMARY_MODE];
   const resolvedMinutes =
     targetMinutes != null &&
@@ -655,14 +660,15 @@ async function runYouTubeWhisperPipeline({
   parsed,
   targetMinutes,
   mode,
+  cookiePath,
 }) {
   const outputDir = path.join(jobsRoot, jobId);
   await mkdir(outputDir, { recursive: true });
-  await runYtDlp(parsed.canonical, outputDir);
+  await runYtDlp(parsed.canonical, outputDir, cookiePath);
   const inputPath = await findDownloadedInputFile(outputDir);
   let audioInputPath = null;
   try {
-    await runYtDlpBestAudio(parsed.canonical, outputDir);
+    await runYtDlpBestAudio(parsed.canonical, outputDir, cookiePath);
     audioInputPath = await findAudioOnlyFile(outputDir);
   } catch (e) {
     console.warn(`[videosum] audio-only download failed: ${e.message}`);
@@ -740,6 +746,7 @@ async function startYouTubeJobPipeline({
   mode,
   apiKey,
   transcriptSource = "captions",
+  youtubeCookiesPath,
 }) {
   const resolvedKey = apiKey || process.env.OPENAI_API_KEY;
   if (!resolvedKey) {
@@ -766,6 +773,7 @@ async function startYouTubeJobPipeline({
         parsed,
         targetMinutes: targetMinutes ?? null,
         mode: modeLabel,
+        cookiePath: youtubeCookiesPath,
       });
     } else {
       result = await runYouTubeSummaryPipeline({
@@ -773,6 +781,7 @@ async function startYouTubeJobPipeline({
         parsed,
         targetMinutes: targetMinutes ?? null,
         mode: modeLabel,
+        cookiePath: youtubeCookiesPath,
       });
     }
     setJob(jobId, {
@@ -787,6 +796,13 @@ async function startYouTubeJobPipeline({
       result: null,
     });
   } finally {
+    if (youtubeCookiesPath && existsSync(youtubeCookiesPath)) {
+      try {
+        unlinkSync(youtubeCookiesPath);
+      } catch {
+        /* ignore */
+      }
+    }
     releaseSlot();
   }
 }
@@ -817,7 +833,7 @@ app.get("/api/summary-modes", (_req, res) => {
 });
 
 app.get("/api/health", (_req, res) => {
-  const args = getYtDlpCookieArgs();
+  const args = getYtDlpCookieArgsFromEnv();
   res.json({
     ok: true,
     ytDlpCookiesConfigured: args.length > 0,
@@ -825,7 +841,7 @@ app.get("/api/health", (_req, res) => {
 });
 
 function jsonBody(req, res, next) {
-  express.json()(req, res, next);
+  express.json({ limit: "4mb" })(req, res, next);
 }
 
 app.post(
@@ -893,6 +909,15 @@ app.post(
       setJob(jobId, { status: "pending", result: null, error: null });
       console.log(`[videosum] job ${jobId} created (url) ${parsed.canonical}`);
 
+      let youtubeCookiesPath = null;
+      const rawCookies = req.body?.youtubeCookies;
+      if (typeof rawCookies === "string" && rawCookies.trim()) {
+        const dir = path.join(jobsRoot, jobId);
+        await mkdir(dir, { recursive: true });
+        youtubeCookiesPath = path.join(dir, "youtube-cookies.txt");
+        writeFileSync(youtubeCookiesPath, rawCookies.trim(), "utf8");
+      }
+
       void startYouTubeJobPipeline({
         jobId,
         parsed,
@@ -900,6 +925,7 @@ app.post(
         mode,
         apiKey,
         transcriptSource,
+        youtubeCookiesPath,
       });
 
       res.status(201).json({ jobId });
