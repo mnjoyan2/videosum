@@ -102,6 +102,12 @@ export async function ensureFfmpegExists() {
 function mimeForAudioPath(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === ".wav") return "audio/wav";
+  if (ext === ".webm") return "audio/webm";
+  if (ext === ".mp3") return "audio/mpeg";
+  if (ext === ".m4a") return "audio/mp4";
+  if (ext === ".mp4") return "video/mp4";
+  if (ext === ".ogg") return "audio/ogg";
+  if (ext === ".flac") return "audio/flac";
   return "audio/mpeg";
 }
 

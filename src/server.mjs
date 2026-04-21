@@ -13,8 +13,10 @@ import {
   DEFAULT_TARGET_MINUTES,
   DEFAULT_SUMMARY_MODE,
   DEFAULT_SUMMARY_MODEL,
+  DEFAULT_TRANSCRIBE_MODEL,
   SUMMARY_MODES,
   summarizeTranscript,
+  transcribeAudio,
   buildClipsFromSummary,
   enforceClipsMaxDuration,
   clipsTotalDuration,
@@ -41,6 +43,8 @@ function normalizeTranscriptSource(raw) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const jobsRoot = path.join(root, "output", "jobs");
+const publicRoot = path.join(root, "public");
+const distRoot = path.join(root, "dist");
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -66,6 +70,19 @@ function makeUpload(jobId) {
     limits: { fileSize: 1024 * 1024 * 1024 },
   });
 }
+
+const voiceUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, tmpdir());
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname) || ".webm";
+      cb(null, `videosum-voice-${randomUUID()}${ext}`);
+    },
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
 
 const jobStore = new Map();
 
@@ -820,7 +837,10 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static(path.join(root, "public")));
+app.use(express.static(publicRoot, { index: false }));
+if (existsSync(distRoot)) {
+  app.use(express.static(distRoot, { index: false }));
+}
 
 app.get("/api/summary-modes", (_req, res) => {
   const modes = Object.entries(SUMMARY_MODES).map(([id, cfg]) => ({
@@ -839,6 +859,50 @@ app.get("/api/health", (_req, res) => {
     ytDlpCookiesConfigured: args.length > 0,
   });
 });
+
+app.post(
+  "/api/voice-transcribe",
+  voiceUpload.single("audio"),
+  async (req, res) => {
+    const uploadedPath = req.file?.path ?? null;
+    try {
+      const apiKey =
+        String(req.headers["x-api-key"] || "").trim() ||
+        process.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        res.status(400).json({
+          error: "No OpenAI API key (X-Api-Key header or OPENAI_API_KEY).",
+        });
+        return;
+      }
+      if (!uploadedPath) {
+        res.status(400).json({ error: "No audio file (field name: audio)." });
+        return;
+      }
+      const transcript = await transcribeAudio({
+        apiKey,
+        audioPath: uploadedPath,
+        model: DEFAULT_TRANSCRIBE_MODEL,
+      });
+      const text = String(transcript.text ?? "").trim();
+      res.json({
+        text,
+        language: transcript.language ?? null,
+        duration: transcript.duration ?? null,
+      });
+    } catch (e) {
+      res.status(500).json({ error: e.message || "Transcription failed." });
+    } finally {
+      if (uploadedPath && existsSync(uploadedPath)) {
+        try {
+          unlinkSync(uploadedPath);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  },
+);
 
 function jsonBody(req, res, next) {
   express.json({ limit: "4mb" })(req, res, next);
@@ -1024,6 +1088,29 @@ app.get("/api/jobs/:jobId/:filename", (req, res, next) => {
       next(err);
     }
   });
+});
+
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/")) {
+    next();
+    return;
+  }
+
+  const distIndex = path.join(distRoot, "index.html");
+  if (existsSync(distIndex)) {
+    res.sendFile(distIndex);
+    return;
+  }
+
+  const legacyIndex = path.join(publicRoot, "index.html");
+  if (existsSync(legacyIndex)) {
+    res.sendFile(legacyIndex);
+    return;
+  }
+
+  res
+    .status(503)
+    .send("Frontend build not found. Run `npm run build` to create the React app.");
 });
 
 app.use((err, _req, res, _next) => {

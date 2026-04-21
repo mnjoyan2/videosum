@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Outfit", sans-serif;
+  --font-sans: "Source Sans 3", sans-serif;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background:
+    radial-gradient(circle at top center, rgba(67, 116, 206, 0.18), transparent 34%),
+    radial-gradient(circle at 0% 100%, rgba(27, 69, 136, 0.22), transparent 24%),
+    linear-gradient(180deg, #1f2733 0%, #0c1117 78%);
+  color: #f4f7fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+.mesh-bg {
+  position: fixed;
+  inset: 52px 0 0;
+  pointer-events: none;
+  opacity: 0.48;
+  background:
+    linear-gradient(135deg, transparent 0 72%, rgba(94, 130, 199, 0.09) 72.3%, transparent 72.8%) 0 0 / 280px 280px,
+    linear-gradient(45deg, transparent 0 78%, rgba(94, 130, 199, 0.08) 78.2%, transparent 78.8%) 0 0 / 340px 340px;
+}
+
+.app-shell {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
+
+.topbar {
+  border-bottom: 1px solid rgba(147, 170, 208, 0.18);
+  background: linear-gradient(180deg, rgba(41, 49, 64, 0.96), rgba(29, 37, 49, 0.88));
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+}
+
+.summary-range {
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(244, 248, 252, 0.92), rgba(159, 177, 206, 0.28));
+}
+
+.summary-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #f6f9fd;
+  border: 2px solid #d6e2f5;
+  box-shadow: 0 4px 18px rgba(21, 37, 64, 0.46);
+}
+
+.summary-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #f6f9fd;
+  border: 2px solid #d6e2f5;
+  box-shadow: 0 4px 18px rgba(21, 37, 64, 0.46);
+}
+
+.clip-placeholder {
+  background:
+    linear-gradient(180deg, rgba(11, 15, 22, 0.02), rgba(8, 11, 18, 0.52)),
+    linear-gradient(135deg, rgba(54, 109, 250, 0.52), rgba(28, 35, 51, 0.32));
+}
